@@ -37,8 +37,16 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   
   // Canvas state
   final transformationController = TransformationController();
-  bool isDragging = false;
-  Offset? dragStartPosition;
+  Offset? lastGlobalPosition;
+  bool isCanvasDragging = false;
+  
+  // Interaction state flags
+  bool isDraggingAnyObject = false;
+  
+  // Corner snapping
+  double cornerSnapDistance = 25.0;
+  double gridSnapDistance = 10.0; // Add grid snapping distance
+  bool enableGridSnap = true; // Enable grid snapping by default
   
   // Room counter
   int roomCounter = 1;
@@ -83,6 +91,11 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       position = Offset(maxX + 120, position.dy);
     }
     
+    // Snap position to grid
+    if (enableGridSnap) {
+      position = _snapToGrid(position);
+    }
+    
     // Create new room
     final newRoom = Room(
       name: 'Room ${roomCounter++}',
@@ -94,15 +107,11 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     
     setState(() {
       // Deselect all existing rooms
-      for (var room in rooms) {
-        room.selected = false;
-      }
+      _clearAllSelections();
       
       // Add and select new room
       rooms.add(newRoom);
-      selectedRoom = newRoom;
-      selectedElement = null;
-      newRoom.selected = true;
+      _selectRoom(newRoom);
       showRightPanel = true;
     });
   }
@@ -138,17 +147,42 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
 
   void _selectRoom(Room room) {
     setState(() {
-      // Deselect all rooms
-      for (var r in rooms) {
-        r.selected = false;
-      }
+      // Clear previous selections
+      _clearAllSelections();
       
       // Select the new room
       room.selected = true;
       selectedRoom = room;
-      selectedElement = null;
       showRightPanel = true;
     });
+  }
+  
+  void _selectElement(ArchitecturalElement element) {
+    setState(() {
+      // Clear previous selections
+      _clearAllSelections();
+      
+      // Select the new element
+      element.isSelected = true;
+      selectedElement = element;
+      showRightPanel = true;
+    });
+  }
+  
+  void _clearAllSelections() {
+    // Clear room selections
+    for (var room in rooms) {
+      room.selected = false;
+    }
+    selectedRoom = null;
+    
+    // Clear element selections
+    for (var room in rooms) {
+      for (var element in room.elements) {
+        element.isSelected = false;
+      }
+    }
+    selectedElement = null;
   }
   
   void _handleRoomWidthChange(Room room, double newWidth) {
@@ -346,6 +380,45 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
                 ],
               ),
               
+              // Grid Snapping
+              CheckboxListTile(
+                title: const Text("Enable Grid Snapping"),
+                value: enableGridSnap,
+                onChanged: (value) {
+                  setState(() {
+                    enableGridSnap = value ?? true;
+                  });
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Corner Snap Settings
+              const Text("Corner Snap Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              
+              Row(
+                children: [
+                  const Text("Snap Distance: "),
+                  Expanded(
+                    child: Slider(
+                      value: cornerSnapDistance,
+                      min: 5,
+                      max: 50,
+                      divisions: 9,
+                      label: cornerSnapDistance.round().toString(),
+                      onChanged: (value) {
+                        setState(() {
+                          cornerSnapDistance = value;
+                        });
+                      },
+                    ),
+                  ),
+                  Text("${cornerSnapDistance.round()}px"),
+                ],
+              ),
+              
               const SizedBox(height: 16),
               
               // Measurement Unit
@@ -358,7 +431,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
                 items: MeasurementUnit.values
                     .map((u) => DropdownMenuItem(
                           value: u,
-                          child: Text(u.name + " (" + u.symbol + ")"),
+                          child: Text("${u.name} (${u.symbol})"),
                         ))
                     .toList(),
                 onChanged: (MeasurementUnit? newUnit) {
@@ -443,13 +516,9 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       ArchitecturalElement? element = _findElementAt(point);
       if (element != null) {
         setState(() {
-          isDragging = true;
-          dragStartPosition = point;
-          element.isDragging = true;
-          
-          selectedElement = element;
-          selectedRoom = null;
-          showRightPanel = true;
+          isDraggingAnyObject = true;
+          element.startDrag(point);
+          _selectElement(element);
         });
         return;
       }
@@ -458,38 +527,71 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       Room? room = _findRoomAt(point);
       if (room != null) {
         setState(() {
-          isDragging = true;
-          dragStartPosition = point;
-          room.isDragging = true;
-          
+          isDraggingAnyObject = true;
+          room.startDrag(point);
           _selectRoom(room);
         });
         return;
       }
       
-      // Nothing found, deselect all
-      setState(() {
-        for (var room in rooms) {
-          room.selected = false;
-        }
-        selectedRoom = null;
-        selectedElement = null;
-        showRightPanel = false;
-      });
+      // Nothing found, start canvas drag or clear selection
+      if (event.buttons == 1) { // Primary button (left click)
+        setState(() {
+          _clearAllSelections();
+          showRightPanel = false;
+        });
+      } else if (event.buttons == 4) { // Middle button
+        // Start canvas dragging
+        isCanvasDragging = true;
+        lastGlobalPosition = event.position;
+      }
     }
     else if (mode == EditorMode.door || mode == EditorMode.window) {
-      // Try to find room wall nearest to pointer
-      for (var room in rooms) {
-        final nearestWall = room.findNearestWallSegment(point, 10.0);
-        if (nearestWall != null) {
-          _addElementToWall(
-            room,
-            nearestWall,
-            mode == EditorMode.door 
-                ? ElementType.door 
-                : ElementType.window
-          );
-          break;
+      // Try to find any corner to place element at
+      final cornerResult = Room.findClosestCorner(point, rooms, cornerSnapDistance);
+      
+      if (cornerResult != null) {
+        final cornerPos = cornerResult.$1;
+        final cornerIndex = cornerResult.$3;
+        final room = cornerResult.$4;
+        
+        _addElementToCorner(
+          room,
+          cornerPos,
+          cornerIndex,
+          mode == EditorMode.door 
+              ? ElementType.door 
+              : ElementType.window
+        );
+      }
+      else {
+        // Try to find midpoint of a wall
+        final midpointResult = Room.findClosestMidpoint(point, rooms, cornerSnapDistance);
+        
+        if (midpointResult != null) {
+          final midpointPos = midpointResult.$1;
+          
+          // Find which wall this midpoint belongs to
+          for (var room in rooms) {
+            for (var wallSegment in room.getWallSegments()) {
+              final wallMidpoint = Offset(
+                (wallSegment.$1.dx + wallSegment.$2.dx) / 2,
+                (wallSegment.$1.dy + wallSegment.$2.dy) / 2,
+              );
+              
+              if ((wallMidpoint - midpointPos).distanceSquared < 1.0) {
+                _addElementToWallMidpoint(
+                  room,
+                  midpointPos,
+                  wallSegment,
+                  mode == EditorMode.door 
+                      ? ElementType.door 
+                      : ElementType.window
+                );
+                break;
+              }
+            }
+          }
         }
       }
     }
@@ -519,8 +621,16 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       }
     }
     else if (mode == EditorMode.room) {
-      // Create a new room at pointer location
-      final position = _snapToGrid(point);
+      Offset position;
+      
+      if (enableGridSnap) {
+        // Snap to grid first
+        position = _snapToGrid(point);
+      } else {
+        // Try to snap to corner if grid snap is disabled
+        position = _snapToNearbyCorner(point, []);
+      }
+      
       final newRoom = Room(
         name: 'Room ${roomCounter++}',
         color: roomColors[(rooms.length) % roomColors.length],
@@ -531,126 +641,276 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       
       setState(() {
         // Deselect all existing rooms
-        for (var room in rooms) {
-          room.selected = false;
-        }
+        _clearAllSelections();
         
         // Add and select new room
         rooms.add(newRoom);
-        selectedRoom = newRoom;
-        selectedElement = null;
-        newRoom.selected = true;
-        showRightPanel = true;
+        _selectRoom(newRoom);
       });
     }
   }
   
   void _handlePointerMove(PointerMoveEvent event) {
-    if (!isDragging || dragStartPosition == null) return;
-    
     final point = _transformPoint(event.localPosition);
-    final delta = point - dragStartPosition!;
     
-    // Skip if there's no movement
-    if (delta == Offset.zero) return;
-    
-    setState(() {
-      if (selectedElement != null && selectedElement!.isDragging) {
-        // Move element
-        selectedElement!.position += delta;
-      }
-      else if (selectedRoom != null && selectedRoom!.isDragging) {
-        // Move room and all its elements
-        selectedRoom!.move(delta);
-      }
+    if (isCanvasDragging && lastGlobalPosition != null) {
+      // Handle canvas dragging (panning the view)
+      final delta = event.position - lastGlobalPosition!;
+      final matrix = transformationController.value;
+      final scale = matrix.getMaxScaleOnAxis();
       
-      dragStartPosition = point;
-    });
+      matrix.translate(delta.dx / scale, delta.dy / scale);
+      transformationController.value = matrix;
+      
+      lastGlobalPosition = event.position;
+      return;
+    }
+    
+    if (isDraggingAnyObject) {
+      setState(() {
+        if (selectedElement != null && selectedElement!.isDragging) {
+          // Option: Apply live snapping during drag for immediate feedback
+          if (enableGridSnap) {
+            Offset snapPoint = _snapToGrid(point);
+            selectedElement!.dragStartPosition = snapPoint;
+            selectedElement!.lastDragPosition = snapPoint;
+            selectedElement!.position = snapPoint;
+          } else {
+            selectedElement!.drag(point);
+          }
+        }
+        else if (selectedRoom != null && selectedRoom!.isDragging) {
+          // Option: Apply live snapping during drag for immediate feedback
+          if (enableGridSnap) {
+            Offset snapPoint = _snapToGrid(point);
+            selectedRoom!.dragStartPosition = snapPoint;
+            selectedRoom!.lastDragPosition = snapPoint;
+            selectedRoom!.position = snapPoint;
+          } else {
+            selectedRoom!.drag(point);
+          }
+        }
+      });
+    }
   }
   
   void _handlePointerUp(PointerUpEvent event) {
-    // Snap positions on release
-    if (isDragging) {
+    // End canvas dragging
+    if (isCanvasDragging) {
+      isCanvasDragging = false;
+      lastGlobalPosition = null;
+      return;
+    }
+    
+    // Handle snapping on release of dragged objects
+    if (isDraggingAnyObject) {
       setState(() {
         if (selectedElement != null && selectedElement!.isDragging) {
-          // Snap element position
-          selectedElement!.position = _snapToGrid(selectedElement!.position);
-          selectedElement!.isDragging = false;
+          // Apply final snapping - prioritize grid snap if enabled
+          if (enableGridSnap) {
+            selectedElement!.position = _snapToGrid(selectedElement!.position);
+          } else {
+            // Try corner/midpoint snapping if grid snap is disabled
+            _snapElementToNearbyCornersOrMidpoints(selectedElement!);
+          }
+          selectedElement!.endDrag();
         }
         else if (selectedRoom != null && selectedRoom!.isDragging) {
-          // Snap room position
-          selectedRoom!.position = _snapToGrid(selectedRoom!.position);
-          selectedRoom!.isDragging = false;
+          // Apply final snapping - prioritize grid snap if enabled
+          if (enableGridSnap) {
+            selectedRoom!.position = _snapToGrid(selectedRoom!.position);
+          } else {
+            // Try corner snapping if grid snap is disabled
+            final otherRooms = rooms.where((r) => r != selectedRoom).toList();
+            selectedRoom!.position = _snapToNearbyCorner(selectedRoom!.position, [selectedRoom!]);
+          }
+          selectedRoom!.endDrag();
         }
         
-        isDragging = false;
-        dragStartPosition = null;
+        isDraggingAnyObject = false;
       });
     }
   }
 
-  void _addElementToWall(Room room, (Offset, Offset) wallSegment, ElementType type) {
+  void _addElementToCorner(Room room, Offset cornerPos, int cornerIndex, ElementType type) {
     // Create element
-    final midPoint = Offset(
-      (wallSegment.$1.dx + wallSegment.$2.dx) / 2,
-      (wallSegment.$1.dy + wallSegment.$2.dy) / 2,
-    );
-    
     final element = ArchitecturalElement(
       type: type,
-      position: midPoint,
+      position: cornerPos, // Will be adjusted in snapToCorner
+      room: room,
     );
     
-    // Snap to wall
-    element.snapToWall(wallSegment, wallThickness);
+    // Snap to corner
+    element.snapToCorner(cornerPos, room, cornerIndex);
     
     setState(() {
       room.elements.add(element);
       
+      // Clear previous selections
+      _clearAllSelections();
+      
       // Select the new element
-      selectedElement = element;
-      selectedRoom = null;
-      showRightPanel = true;
+      _selectElement(element);
+      
+      // Switch to select mode
+      mode = EditorMode.select;
+    });
+  }
+  
+  void _addElementToWallMidpoint(Room room, Offset midpointPos, (Offset, Offset) wallSegment, ElementType type) {
+    // Create element
+    final element = ArchitecturalElement(
+      type: type,
+      position: midpointPos, // Will be adjusted in snapToWallMidpoint
+      room: room,
+    );
+    
+    // Snap to midpoint
+    element.snapToWallMidpoint(midpointPos, wallSegment);
+    
+    setState(() {
+      room.elements.add(element);
+      
+      // Clear previous selections
+      _clearAllSelections();
+      
+      // Select the new element
+      _selectElement(element);
       
       // Switch to select mode
       mode = EditorMode.select;
     });
   }
 
-  // Finds element at given point
+  // Finds element at given point with tolerance consideration
   ArchitecturalElement? _findElementAt(Offset point) {
+    // Try to find element under pointer, prioritizing selected ones
+    ArchitecturalElement? foundElement;
+    
+    // First check already selected elements
     for (var room in rooms) {
       for (var element in room.elements) {
-        if (element.containsPoint(point)) {
-          return element;
+        if (element.isSelected && element.containsPoint(point)) {
+          return element; // Return immediately if we find a selected element
         }
       }
     }
-    return null;
+    
+    // Then check unselected elements
+    for (var room in rooms) {
+      for (var element in room.elements) {
+        if (element.containsPoint(point)) {
+          foundElement = element;
+          break;
+        }
+      }
+      if (foundElement != null) break;
+    }
+    
+    return foundElement;
   }
   
-  // Finds room at given point
+  // Finds room at given point with priority for selected rooms
   Room? _findRoomAt(Offset point) {
+    // First check if point is within already selected room
+    if (selectedRoom != null && selectedRoom!.containsPoint(point)) {
+      return selectedRoom;
+    }
+    
+    // Then check other rooms
     for (var room in rooms) {
-      if (room.containsPoint(point)) {
+      if (!room.selected && room.containsPoint(point)) {
         return room;
       }
     }
+    
     return null;
   }
-
-  Offset _transformPoint(Offset point) {
-    final matrix = transformationController.value;
-    final translation = Offset(matrix.getTranslation().x, matrix.getTranslation().y);
-    final scale = matrix.getMaxScaleOnAxis();
-    return (point - translation) / scale;
+  
+  // Snap to nearby corners for rooms
+  Offset _snapToNearbyCorner(Offset position, List<Room> excludeRooms) {
+    // Get rooms for snapping (exclude certain rooms if needed)
+    final snapRooms = rooms.where((r) => !excludeRooms.contains(r)).toList();
+    
+    if (snapRooms.isEmpty) {
+      return position; // No rooms to snap to
+    }
+    
+    // Try to find corner to snap to
+    final cornerResult = Room.findClosestCorner(position, snapRooms, cornerSnapDistance);
+    
+    if (cornerResult != null) {
+      // Return the corner position
+      return cornerResult.$1;
+    }
+    
+    // If no corners are close enough, return the original position
+    return position;
   }
-
+  
+  // Snap to grid
   Offset _snapToGrid(Offset position) {
     return Offset(
       (position.dx / gridSize).round() * gridSize,
       (position.dy / gridSize).round() * gridSize,
     );
+  }
+  
+  // Snap elements to the nearest corner or midpoint
+  bool _snapElementToNearbyCornersOrMidpoints(ArchitecturalElement element) {
+    // Try to find a corner
+    final cornerResult = ArchitecturalElement.findClosestCorner(
+      element.position, 
+      rooms, 
+      cornerSnapDistance
+    );
+    
+    if (cornerResult != null) {
+      final cornerPos = cornerResult.$1;
+      final room = cornerResult.$2;
+      final cornerIndex = cornerResult.$3;
+      
+      // Snap element to corner
+      element.snapToCorner(cornerPos, room, cornerIndex);
+      return true;
+    }
+    
+    // Try to find a wall midpoint
+    final midpointResult = Room.findClosestMidpoint(
+      element.position, 
+      rooms, 
+      cornerSnapDistance
+    );
+    
+    if (midpointResult != null) {
+      final midpointPos = midpointResult.$1;
+      
+      // Find which wall this midpoint belongs to
+      for (var room in rooms) {
+        for (var wallSegment in room.getWallSegments()) {
+          final wallMidpoint = Offset(
+            (wallSegment.$1.dx + wallSegment.$2.dx) / 2,
+            (wallSegment.$1.dy + wallSegment.$2.dy) / 2,
+          );
+          
+          if ((wallMidpoint - midpointPos).distanceSquared < 1.0) {
+            // Snap element to midpoint
+            element.snapToWallMidpoint(midpointPos, wallSegment);
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  // Transform point from screen space to canvas space
+  Offset _transformPoint(Offset point) {
+    final matrix = transformationController.value;
+    final translation = Offset(matrix.getTranslation().x, matrix.getTranslation().y);
+    final scale = matrix.getMaxScaleOnAxis();
+    return (point - translation) / scale;
   }
 
   @override
@@ -726,6 +986,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     );
   }
 
+  // Build the interactive canvas with pointer event handling
   Widget _buildCanvas() {
     return Listener(
       onPointerDown: _handlePointerDown,
@@ -737,6 +998,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         boundaryMargin: const EdgeInsets.all(1000),
         minScale: 0.1,
         maxScale: 5.0,
+        panEnabled: false, // Disable default pan to use our custom implementation
         child: Container(
           width: 3000,
           height: 3000,
@@ -752,6 +1014,9 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
               showGrid: showGrid,
               showMeasurements: showMeasurements,
               wallThickness: wallThickness,
+              isDragging: isDraggingAnyObject || isCanvasDragging,
+              cornerSnapDistance: cornerSnapDistance,
+              enableGridSnap: enableGridSnap,
             ),
           ),
         ),

@@ -18,4 +18,14 @@ class MeasurementUtils {
         return '${sqin.toStringAsFixed(2)}in²';
     }
   }
+  
+  // Grid to real world conversion
+  static double gridToReal(double gridValue, double gridSize, double gridRealSize) {
+    return gridValue * gridRealSize / gridSize;
+  }
+  
+  // Real world to grid conversion
+  static double realToGrid(double realValue, double gridSize, double gridRealSize) {
+    return realValue * gridSize / gridRealSize;
+  }
 }
