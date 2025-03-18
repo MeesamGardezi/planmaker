@@ -1,37 +1,10 @@
 import 'package:flutter/material.dart';
-
 import '../models/enums.dart';
 
 class MeasurementUtils {
   static String formatLength(double meters, MeasurementUnit unit) {
     final converted = meters * unit.conversionFromMeters;
     return '${converted.toStringAsFixed(2)}${unit.symbol}';
-  }
-
-  static String formatArea(double squareMeters, MeasurementUnit unit) {
-    switch (unit) {
-      case MeasurementUnit.meters:
-        return '${squareMeters.toStringAsFixed(2)}m²';
-      case MeasurementUnit.feet:
-        final sqft = squareMeters * 10.7639;
-        return '${sqft.toStringAsFixed(2)}ft²';
-      case MeasurementUnit.inches:
-        final sqin = squareMeters * 1550;
-        return '${sqin.toStringAsFixed(2)}in²';
-    }
-  }
-
-  static String formatVolume(double cubicMeters, MeasurementUnit unit) {
-    switch (unit) {
-      case MeasurementUnit.meters:
-        return '${cubicMeters.toStringAsFixed(2)}m³';
-      case MeasurementUnit.feet:
-        final cuft = cubicMeters * 35.3147;
-        return '${cuft.toStringAsFixed(2)}ft³';
-      case MeasurementUnit.inches:
-        final cuin = cubicMeters * 61023.7;
-        return '${cuin.toStringAsFixed(2)}in³';
-    }
   }
 
   // Convert from meters to the specified unit
@@ -79,42 +52,6 @@ class MeasurementUtils {
   // Format with unit for display in text fields
   static String formatWithUnit(double value, MeasurementUnit unit) {
     return '${value.toStringAsFixed(2)} ${unit.symbol}';
-  }
-
-  // Calculate total surface area for all rooms
-  static double calculateTotalSurfaceArea(
-      List<dynamic> rooms, double gridSize, double gridRealSize) {
-    double totalArea = 0;
-
-    for (var room in rooms) {
-      totalArea += room.getTotalSurfaceArea(gridSize, gridRealSize);
-    }
-
-    return totalArea;
-  }
-
-  // Calculate total wall volume for all rooms
-  static double calculateTotalWallVolume(
-      List<dynamic> rooms, double gridSize, double gridRealSize) {
-    double totalVolume = 0;
-
-    for (var room in rooms) {
-      totalVolume += room.getTotalWallVolume(gridSize, gridRealSize);
-    }
-
-    return totalVolume;
-  }
-
-  // Calculate total room volume
-  static double calculateTotalRoomVolume(
-      List<dynamic> rooms, double gridSize, double gridRealSize) {
-    double totalVolume = 0;
-
-    for (var room in rooms) {
-      totalVolume += room.getVolume(gridSize, gridRealSize);
-    }
-
-    return totalVolume;
   }
 }
 

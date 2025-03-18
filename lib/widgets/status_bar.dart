@@ -123,11 +123,6 @@ class StatusBar extends StatelessWidget {
         indicatorIcon = Icons.horizontal_rule;
         indicatorText = "Wall Snap";
         break;
-      case SnapType.midpoint:
-        indicatorColor = Colors.orange;
-        indicatorIcon = Icons.fiber_manual_record;
-        indicatorText = "Midpoint Snap";
-        break;
     }
     
     return Row(

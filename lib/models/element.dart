@@ -9,7 +9,6 @@ class ArchitecturalElement {
   double rotation; // in radians
   double width;
   double height;
-  double wallHeight; // Height of the element on the wall
   bool isSelected;
   String? name;
   bool isDragging = false;
@@ -23,7 +22,6 @@ class ArchitecturalElement {
   static const double defaultDoorHeight = 6.0;
   static const double defaultWindowWidth = 40.0;
   static const double defaultWindowHeight = 6.0;
-  static const double defaultWallHeight = 80.0; // 6'8" in grid units for standard door
   
   // Selection hitbox expansion (makes selection easier)
   final double selectionPadding = 8.0;
@@ -34,13 +32,11 @@ class ArchitecturalElement {
     this.rotation = 0,
     double? width,
     double? height,
-    double? wallHeight,
     this.isSelected = false,
     this.name,
     this.room,
   })  : width = width ?? _getDefaultWidth(type),
-        height = height ?? _getDefaultHeight(type),
-        wallHeight = wallHeight ?? (type == ElementType.window ? 45.0 : defaultWallHeight);
+        height = height ?? _getDefaultHeight(type);
 
   static double _getDefaultWidth(ElementType type) {
     switch (type) {
@@ -176,13 +172,6 @@ class ArchitecturalElement {
     }
     
     return null;
-  }
-  
-  // Calculate real-world area of the element
-  double getArea(double gridSize, double gridRealSize) {
-    final realWidth = width * gridRealSize / gridSize;
-    final realWallHeight = wallHeight * gridRealSize / gridSize;
-    return realWidth * realWallHeight;
   }
   
   // Get bounds as a rotated rectangle (for visual feedback)

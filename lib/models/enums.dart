@@ -27,12 +27,11 @@ enum EditorMode {
   const EditorMode(this.label);
 }
 
-// New enum for tracking snap types
+// Simplified snap types
 enum SnapType {
   none('No Snap'),
   corner('Corner Snap'),
-  wall('Wall Snap'),
-  midpoint('Midpoint Snap');
+  wall('Wall Snap');
 
   final String label;
   const SnapType(this.label);

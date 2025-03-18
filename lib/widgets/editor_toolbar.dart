@@ -14,7 +14,6 @@ class EditorToolbar extends StatelessWidget {
   final VoidCallback onAddRoom;
   final VoidCallback onRenameProject;
   final VoidCallback onOpenSettings;
-  final VoidCallback onShowSurfaceAreaInfo;
 
   const EditorToolbar({
     super.key,
@@ -28,7 +27,6 @@ class EditorToolbar extends StatelessWidget {
     required this.onAddRoom,
     required this.onRenameProject,
     required this.onOpenSettings,
-    required this.onShowSurfaceAreaInfo,
   });
 
   @override
@@ -106,13 +104,6 @@ class EditorToolbar extends StatelessWidget {
           
           const SizedBox(width: 8),
           
-          // Surface Area Info button
-          IconButton(
-            icon: const Icon(Icons.area_chart),
-            tooltip: "Surface Area Information",
-            onPressed: onShowSurfaceAreaInfo,
-          ),
-          
           // Menu
           IconButton(
             icon: const Icon(Icons.more_vert),
@@ -135,10 +126,6 @@ class EditorToolbar extends StatelessWidget {
                     child: Text('Export as PDF'),
                   ),
                   const PopupMenuItem(
-                    value: 'surface_info',
-                    child: Text('Surface Area Info'),
-                  ),
-                  const PopupMenuItem(
                     value: 'settings',
                     child: Text('Settings'),
                   ),
@@ -146,8 +133,6 @@ class EditorToolbar extends StatelessWidget {
               ).then((value) {
                 if (value == 'settings') {
                   onOpenSettings();
-                } else if (value == 'surface_info') {
-                  onShowSurfaceAreaInfo();
                 }
               });
             },

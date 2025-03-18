@@ -53,15 +53,12 @@ class FloorPlanPainter extends CustomPainter {
       _drawRoomBackground(canvas, room);
     }
     
-    // Second pass: draw shared walls
-    _drawSharedWalls(canvas);
-    
-    // Third pass: draw regular walls
+    // Draw walls
     for (var room in rooms) {
-      _drawRoomWalls(canvas, room, false); // false = don't draw shared walls
+      _drawRoomWalls(canvas, room);
     }
     
-    // Fourth pass: draw elements
+    // Draw elements
     for (var room in rooms) {
       _drawRoomElements(canvas, room);
     }
@@ -165,122 +162,7 @@ class FloorPlanPainter extends CustomPainter {
     );
   }
   
-  // Draw shared walls with special styling
-  void _drawSharedWalls(Canvas canvas) {
-    final Set<(Room, int, Room, int)> drawnWalls = {};
-    
-    for (var room in rooms) {
-      for (var connection in room.sharedWalls) {
-        final otherRoom = connection.$1;
-        final thisWallIndex = connection.$2;
-        final otherWallIndex = connection.$3;
-        
-        // Skip if this wall pair has already been drawn
-        final key1 = (room, thisWallIndex, otherRoom, otherWallIndex);
-        final key2 = (otherRoom, otherWallIndex, room, thisWallIndex);
-        
-        if (drawnWalls.contains(key1) || drawnWalls.contains(key2)) {
-          continue;
-        }
-        
-        // Mark as drawn
-        drawnWalls.add(key1);
-        
-        // Get wall segments
-        final thisWalls = room.getWallSegments();
-        final thisWall = thisWalls[thisWallIndex];
-        
-        // Draw shared wall with special styling
-        final sharedWallPaint = Paint()
-          ..color = Colors.purple.shade800
-          ..strokeWidth = wallThickness * 1.2
-          ..strokeCap = StrokeCap.butt;
-        
-        canvas.drawLine(thisWall.$1, thisWall.$2, sharedWallPaint);
-        
-        // Draw shared wall label if showing measurements
-        if (showMeasurements) {
-          _drawSharedWallLabel(canvas, thisWall, room.name, otherRoom.name);
-        }
-      }
-    }
-  }
-  
-  void _drawSharedWallLabel(Canvas canvas, (Offset, Offset) wall, String room1Name, String room2Name) {
-    // Calculate wall midpoint
-    final midpoint = Offset(
-      (wall.$1.dx + wall.$2.dx) / 2,
-      (wall.$1.dy + wall.$2.dy) / 2
-    );
-    
-    // Calculate wall length
-    final length = (wall.$2 - wall.$1).distance;
-    final realLength = length * gridRealSize / gridSize;
-    final formattedLength = MeasurementUtils.formatLength(realLength, unit);
-    
-    // Create shared wall text
-    final textSpan = TextSpan(
-      text: "Shared: $formattedLength",
-      style: const TextStyle(
-        color: Colors.purple,
-        fontSize: 10,
-        fontWeight: FontWeight.bold,
-        backgroundColor: Colors.white70,
-      ),
-    );
-
-    final textPainter = TextPainter(
-      text: textSpan,
-      textDirection: TextDirection.ltr,
-    );
-
-    textPainter.layout();
-    
-    // Position text slightly above wall midpoint
-    final wallAngle = math.atan2(
-      wall.$2.dy - wall.$1.dy,
-      wall.$2.dx - wall.$1.dx
-    );
-    
-    final perpAngle = wallAngle + math.pi / 2;
-    final textOffset = 15.0;
-    
-    textPainter.paint(
-      canvas,
-      Offset(
-        midpoint.dx - textPainter.width / 2,
-        midpoint.dy - textPainter.height / 2 - textOffset
-      ),
-    );
-    
-    // Draw connecting rooms text
-    final roomsTextSpan = TextSpan(
-      text: "$room1Name ↔ $room2Name",
-      style: const TextStyle(
-        color: Colors.purple,
-        fontSize: 8,
-        fontStyle: FontStyle.italic,
-        backgroundColor: Colors.white70,
-      ),
-    );
-
-    final roomsTextPainter = TextPainter(
-      text: roomsTextSpan,
-      textDirection: TextDirection.ltr,
-    );
-
-    roomsTextPainter.layout();
-    
-    roomsTextPainter.paint(
-      canvas,
-      Offset(
-        midpoint.dx - roomsTextPainter.width / 2,
-        midpoint.dy - roomsTextPainter.height / 2 + textOffset
-      ),
-    );
-  }
-  
-  void _drawRoomWalls(Canvas canvas, Room room, bool drawSharedWalls) {
+  void _drawRoomWalls(Canvas canvas, Room room) {
     final wallSegments = room.getWallSegments();
     final isSelected = room == selectedRoom;
     
@@ -290,11 +172,6 @@ class FloorPlanPainter extends CustomPainter {
       ..strokeCap = StrokeCap.butt;
     
     for (int i = 0; i < wallSegments.length; i++) {
-      // Skip shared walls if requested
-      if (!drawSharedWalls && room.isWallShared(i)) {
-        continue;
-      }
-      
       final wall = wallSegments[i];
       
       // Draw wall line
@@ -635,10 +512,6 @@ class FloorPlanPainter extends CustomPainter {
       case SnapType.wall:
         indicatorColor = Colors.green;
         indicatorText = "Wall Snap";
-        break;
-      case SnapType.midpoint:
-        indicatorColor = Colors.orange;
-        indicatorText = "Midpoint Snap";
         break;
       default:
         indicatorColor = Colors.grey;

@@ -17,7 +17,6 @@ class PropertiesPanel extends StatefulWidget {
   final Function(ArchitecturalElement, String) onElementNameChanged;
   final Function(ArchitecturalElement, double) onElementWidthChanged;
   final Function(ArchitecturalElement, double) onElementHeightChanged;
-  final Function(ArchitecturalElement, double) onElementWallHeightChanged;
   final Function(ArchitecturalElement, double) onElementRotationChanged;
   final VoidCallback onPanelClosed;
   final double gridSize;
@@ -36,7 +35,6 @@ class PropertiesPanel extends StatefulWidget {
     required this.onElementNameChanged,
     required this.onElementWidthChanged,
     required this.onElementHeightChanged,
-    required this.onElementWallHeightChanged,
     required this.onElementRotationChanged,
     required this.onPanelClosed,
     required this.gridSize,
@@ -53,11 +51,9 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
   late TextEditingController _roomWidthController;
   late TextEditingController _roomHeightController;
   late List<TextEditingController> _wallHeightControllers;
-  late List<TextEditingController> _wallBreadthControllers;
   late TextEditingController _elementNameController;
   late TextEditingController _elementWidthController;
   late TextEditingController _elementHeightController;
-  late TextEditingController _elementWallHeightController;
   late TextEditingController _elementRotationController;
   
   @override
@@ -103,15 +99,6 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
       )
     );
     
-    _wallBreadthControllers = List.generate(
-      4, 
-      (index) => TextEditingController(
-        text: widget.selectedRoom != null 
-            ? widget.selectedRoom!.walls[index].breadth.toStringAsFixed(2)
-            : '0.50'
-      )
-    );
-    
     // Element controllers
     _elementNameController = TextEditingController(
       text: widget.selectedElement?.name ?? 
@@ -124,12 +111,6 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
     
     _elementHeightController = TextEditingController(
       text: _formatGridUnits(widget.selectedElement?.height ?? 0)
-    );
-    
-    _elementWallHeightController = TextEditingController(
-      text: widget.selectedElement != null
-          ? widget.selectedElement!.wallHeight.toStringAsFixed(2)
-          : '0'
     );
     
     _elementRotationController = TextEditingController(
@@ -146,13 +127,9 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
     for (var controller in _wallHeightControllers) {
       controller.dispose();
     }
-    for (var controller in _wallBreadthControllers) {
-      controller.dispose();
-    }
     _elementNameController.dispose();
     _elementWidthController.dispose();
     _elementHeightController.dispose();
-    _elementWallHeightController.dispose();
     _elementRotationController.dispose();
   }
   
@@ -175,17 +152,13 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
   }
   
   // Update wall property and refresh UI
-  void _updateWallProperty(int wallIndex, String property, String value) {
+  void _updateWallHeight(int wallIndex, String value) {
     if (widget.selectedRoom == null) return;
     
     setState(() {
       double? doubleValue = double.tryParse(value);
       if (doubleValue != null) {
-        if (property == 'height') {
-          widget.selectedRoom!.walls[wallIndex].height = doubleValue;
-        } else if (property == 'breadth') {
-          widget.selectedRoom!.walls[wallIndex].breadth = doubleValue;
-        }
+        widget.selectedRoom!.walls[wallIndex].height = doubleValue;
       }
     });
   }
@@ -358,7 +331,7 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
         ),
         const SizedBox(height: 8),
         
-        // Wall properties list
+        // Wall height properties
         ...List.generate(4, (index) => _buildWallProperties(room, index)),
         
         const SizedBox(height: 24),
@@ -420,55 +393,7 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("Elements: ${room.elements.length}"),
-              Text("Floor Area: ${MeasurementUtils.formatArea(room.getArea(widget.gridSize, widget.gridRealSize), widget.unit)}"),
-              Text("Room Volume: ${MeasurementUtils.formatVolume(room.getVolume(widget.gridSize, widget.gridRealSize), widget.unit)}"),
               Text("Perimeter: ${MeasurementUtils.formatLength(room.getPerimeter(widget.gridSize, widget.gridRealSize), widget.unit)}"),
-              Text("Surface Area: ${MeasurementUtils.formatArea(room.getTotalSurfaceArea(widget.gridSize, widget.gridRealSize), widget.unit)}"),
-              
-              const SizedBox(height: 8),
-              const Text("Wall Areas:", style: TextStyle(fontWeight: FontWeight.bold)),
-              
-              ...List.generate(4, (index) {
-                final wallLengths = room.getWallRealLengths(widget.gridSize, widget.gridRealSize);
-                final wallArea = room.getWallArea(index, widget.gridSize, widget.gridRealSize);
-                final wallVolume = room.getWallVolume(index, widget.gridSize, widget.gridRealSize);
-                
-                return Padding(
-                  padding: const EdgeInsets.only(left: 12, top: 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("${room.getWallDescriptions()[index]}: "),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Area: ${MeasurementUtils.formatArea(wallArea, widget.unit)}"),
-                            Text("Volume: ${MeasurementUtils.formatVolume(wallVolume, widget.unit)}"),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-              
-              const SizedBox(height: 8),
-              // Show shared walls info
-              if (room.sharedWalls.isNotEmpty) ...[
-                const Text("Shared Walls:", style: TextStyle(fontWeight: FontWeight.bold)),
-                ...room.sharedWalls.map((connection) {
-                  final otherRoom = connection.$1;
-                  final thisWallIndex = connection.$2;
-                  final thisWallName = room.getWallDescriptions()[thisWallIndex];
-                  
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 12, top: 4),
-                    child: Text("$thisWallName shared with ${otherRoom.name}"),
-                  );
-                }),
-              ],
             ],
           ),
         ),
@@ -480,39 +405,21 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
     final wallName = room.getWallDescriptions()[wallIndex];
     final wallLengths = room.getWallRealLengths(widget.gridSize, widget.gridRealSize);
     final wallLength = wallLengths[wallIndex];
-    final wallArea = room.getWallArea(wallIndex, widget.gridSize, widget.gridRealSize);
-    final wallVolume = room.getWallVolume(wallIndex, widget.gridSize, widget.gridRealSize);
-    final isShared = room.isWallShared(wallIndex);
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isShared ? Colors.purple.withOpacity(0.05) : Colors.grey[200],
+        color: Colors.grey[200],
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: isShared ? Colors.purple.withOpacity(0.3) : Colors.grey[300]!,
-        ),
+        border: Border.all(color: Colors.grey[300]!),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                wallName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              if (isShared)
-                const Text(
-                  "Shared",
-                  style: TextStyle(
-                    color: Colors.purple,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-            ],
+          Text(
+            wallName,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           
@@ -550,65 +457,7 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                   ],
-                  onChanged: (value) => _updateWallProperty(wallIndex, 'height', value),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 8),
-          
-          // Wall breadth (thickness)
-          Row(
-            children: [
-              const SizedBox(width: 80, child: Text("Thickness:")),
-              Expanded(
-                child: TextField(
-                  controller: _wallBreadthControllers[wallIndex],
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    suffixText: widget.unit.symbol,
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                  ],
-                  onChanged: (value) => _updateWallProperty(wallIndex, 'breadth', value),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 8),
-          
-          // Wall area
-          Row(
-            children: [
-              const SizedBox(width: 90, child: Text("Area:")), 
-              Expanded(
-                child: Text(
-                  "${MeasurementUtils.formatArea(wallArea, widget.unit)}",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500, 
-                    color: Colors.grey[700],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          // Wall volume
-          Row(
-            children: [
-              const SizedBox(width: 90, child: Text("Volume:")), 
-              Expanded(
-                child: Text(
-                  "${MeasurementUtils.formatVolume(wallVolume, widget.unit)}",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500, 
-                    color: Colors.grey[700],
-                  ),
+                  onChanged: (value) => _updateWallHeight(wallIndex, value),
                 ),
               ),
             ],
@@ -716,58 +565,6 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
               ),
             ),
           ],
-        ),
-        
-        const SizedBox(height: 12),
-        
-        // Wall Height - for doors/windows
-        Row(
-          children: [
-            SizedBox(
-              width: 80, 
-              child: Text(
-                element.type == ElementType.window ? "Height:" : "Height:"
-              ),
-            ),
-            Expanded(
-              child: TextField(
-                controller: _elementWallHeightController,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  suffixText: widget.unit.symbol,
-                ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                ],
-                onChanged: (value) {
-                  final double? parsed = double.tryParse(value);
-                  if (parsed != null) {
-                    widget.onElementWallHeightChanged(element, parsed);
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 24),
-        
-        // Element area
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.grey[300]!),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Area: ${MeasurementUtils.formatArea(element.getArea(widget.gridSize, widget.gridRealSize), widget.unit)}"),
-            ],
-          ),
         ),
         
         const SizedBox(height: 24),
