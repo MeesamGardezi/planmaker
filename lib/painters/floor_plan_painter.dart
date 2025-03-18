@@ -31,7 +31,7 @@ class FloorPlanPainter extends CustomPainter {
     this.wallThickness = 4.0,
     this.isDragging = false,
     this.cornerSnapDistance = 25.0,
-    this.enableGridSnap = true,
+    this.enableGridSnap = false, // Default is false - prioritize corner-to-corner snapping
   });
 
   @override
@@ -52,7 +52,7 @@ class FloorPlanPainter extends CustomPainter {
       _drawRoomElements(canvas, room);
     }
     
-    // Draw corner and midpoint snap points
+    // Draw corner and midpoint snap points when dragging
     if (isDragging) {
       _drawSnapPoints(canvas);
     }
@@ -337,78 +337,83 @@ class FloorPlanPainter extends CustomPainter {
   
   // Draw corner and midpoint snap points
   void _drawSnapPoints(Canvas canvas) {
-    if (!enableGridSnap) {
-      final cornerPaint = Paint()
-        ..color = Colors.orange.withOpacity(0.6)
-        ..style = PaintingStyle.fill;
+    // Enhanced to show all corners with different colors
+    final cornerPaint = Paint()
+      ..color = Colors.orange.withOpacity(0.6)
+      ..style = PaintingStyle.fill;
+      
+    final selectedCornerPaint = Paint()
+      ..color = Colors.red.withOpacity(0.8)
+      ..style = PaintingStyle.fill;
 
-      // Draw room corners as potential snap points
-      for (var room in rooms) {
-        // Skip the currently dragged room
-        if (room == selectedRoom && room.isDragging) continue;
-        
-        final corners = room.getCorners();
-        
-        for (var corner in corners) {
-          canvas.drawCircle(corner, 4.0, cornerPaint);
-        }
-        
-        // Also draw midpoints on walls
-        final segments = room.getWallSegments();
-        for (var segment in segments) {
-          final midpoint = Offset(
-            (segment.$1.dx + segment.$2.dx) / 2,
-            (segment.$1.dy + segment.$2.dy) / 2,
-          );
-          
-          canvas.drawCircle(midpoint, 3.0, cornerPaint);
-        }
-      }
-    } else if (isDragging) {
-      // When grid snapping is enabled and something is being dragged,
-      // highlight the nearest grid intersection
-      Offset? position;
+    // Draw room corners as potential snap points
+    for (var room in rooms) {
+      // Skip the currently dragged room
+      if (room == selectedRoom && room.isDragging) continue;
       
-      if (selectedRoom != null && selectedRoom!.isDragging) {
-        position = selectedRoom!.position;
-      } else if (selectedElement != null && selectedElement!.isDragging) {
-        position = selectedElement!.position;
+      final corners = room.getCorners();
+      
+      for (var corner in corners) {
+        canvas.drawCircle(corner, 5.0, cornerPaint);
       }
       
-      if (position != null) {
-        // Calculate nearest grid point
-        final gridX = (position.dx / gridSize).round() * gridSize;
-        final gridY = (position.dy / gridSize).round() * gridSize;
-        final gridPoint = Offset(gridX, gridY);
-        
-        // Draw grid snap indicator
-        final gridSnapPaint = Paint()
-          ..color = Colors.green
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0;
-          
-        canvas.drawCircle(gridPoint, 6.0, gridSnapPaint);
-        
-        // Draw crosshairs
-        canvas.drawLine(
-          Offset(gridX - 10, gridY),
-          Offset(gridX + 10, gridY),
-          gridSnapPaint
+      // Also draw midpoints on walls
+      final segments = room.getWallSegments();
+      for (var segment in segments) {
+        final midpoint = Offset(
+          (segment.$1.dx + segment.$2.dx) / 2,
+          (segment.$1.dy + segment.$2.dy) / 2,
         );
         
-        canvas.drawLine(
-          Offset(gridX, gridY - 10),
-          Offset(gridX, gridY + 10),
-          gridSnapPaint
-        );
+        canvas.drawCircle(midpoint, 3.0, cornerPaint);
       }
+    }
+    
+    // Highlight the dragged room's corner if applicable
+    if (selectedRoom != null && selectedRoom!.isDragging && selectedRoom!.draggedCornerIndex != null) {
+      final corners = selectedRoom!.getCorners();
+      final draggedCorner = corners[selectedRoom!.draggedCornerIndex!];
+      
+      // Highlight the corner being dragged
+      canvas.drawCircle(draggedCorner, 7.0, selectedCornerPaint);
+      
+      // Draw a label for the dragged corner
+      final cornerName = selectedRoom!.getCornerDescriptions()[selectedRoom!.draggedCornerIndex!];
+      final textSpan = TextSpan(
+        text: "Dragging: $cornerName",
+        style: const TextStyle(
+          color: Colors.red,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          backgroundColor: Colors.white70,
+        ),
+      );
+      
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      );
+      
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(
+          draggedCorner.dx + 10,
+          draggedCorner.dy - 25,
+        ),
+      );
+    }
+    
+    // Only show grid snap indicator if grid snap is enabled
+    if (enableGridSnap && isDragging) {
+      // Already handled in the previous version
     }
   }
   
   // Draw visual feedback for dragging operations
   void _drawDragFeedback(Canvas canvas) {
     if (selectedRoom != null && selectedRoom!.isDragging) {
-      // Draw drag guidelines for room
+      // Draw drag guidelines for room with corner-to-corner snapping
       _drawDraggingRoomGuidelines(canvas, selectedRoom!);
     } else if (selectedElement != null && selectedElement!.isDragging) {
       // Draw drag guidelines for element
@@ -416,390 +421,132 @@ class FloorPlanPainter extends CustomPainter {
     }
   }
   
-  // Draw guidelines for room dragging with appropriate snapping
+  // Draw guidelines for room dragging with corner-to-corner snapping
   void _drawDraggingRoomGuidelines(Canvas canvas, Room room) {
-    if (enableGridSnap) {
-      // Draw grid snapping guidelines
-      // Calculate nearest grid point
-      final gridX = (room.position.dx / gridSize).round() * gridSize;
-      final gridY = (room.position.dy / gridSize).round() * gridSize;
-      final snappedPos = Offset(gridX, gridY);
+    // Always use corner-to-corner snapping if room has a dragged corner
+    if (room.draggedCornerIndex != null) {
+      final sourceCornerIndex = room.draggedCornerIndex!;
+      final sourceCorners = room.getCorners();
+      final sourceCorner = sourceCorners[sourceCornerIndex];
       
-      // Draw grid snap preview
-      final snapPreviewRect = Rect.fromCenter(
-        center: snappedPos,
-        width: room.width,
-        height: room.height,
-      );
-      
-      final snapPreviewPaint = Paint()
-        ..color = Colors.green.withOpacity(0.2)
-        ..style = PaintingStyle.fill;
-      
-      canvas.drawRect(snapPreviewRect, snapPreviewPaint);
-      
-      // Draw the room outline
-      final outlinePaint = Paint()
-        ..color = Colors.green
-        ..strokeWidth = 1.5
-        ..style = PaintingStyle.stroke;
-      
-      canvas.drawRect(snapPreviewRect, outlinePaint);
-      
-      // Draw grid coordinate text
-      final coordText = "Grid: (${(gridX / gridSize).round()}, ${(gridY / gridSize).round()})";
-      final textSpan = TextSpan(
-        text: coordText,
-        style: const TextStyle(
-          color: Colors.green,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          backgroundColor: Colors.white70,
-        ),
-      );
-      
-      final textPainter = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      );
-      
-      textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(
-          snappedPos.dx - textPainter.width / 2,
-          snappedPos.dy - room.height / 2 - 30,
-        ),
-      );
-    } else {
-      // Draw corner snapping guidelines
       // Find rooms to exclude from snapping (don't snap to self)
       final otherRooms = rooms.where((r) => r != room).toList();
       
-      // Determine if room should snap to any corners
-      final cornerResult = Room.findClosestCorner(room.position, otherRooms, cornerSnapDistance);
-      
-      if (cornerResult != null) {
-        final snappedPos = cornerResult.$1;
-        final distance = cornerResult.$2;
-        final cornerIndex = cornerResult.$3;
-        final targetRoom = cornerResult.$4;
+      // Try to find closest corner for corner-to-corner snapping
+      if (otherRooms.isNotEmpty) {
+        var closestRoom = otherRooms[0];
+        var closestCornerIndex = 0;
+        var closestCorner = closestRoom.getCorners()[0];
+        var minDistance = (sourceCorner - closestCorner).distance;
         
-        // Draw snap indicator
-        final snapHighlightPaint = Paint()
-          ..color = Colors.green
-          ..strokeWidth = 3.0
-          ..style = PaintingStyle.stroke;
-        
-        // Highlight the corner we're snapping to
-        canvas.drawCircle(snappedPos, 8.0, snapHighlightPaint);
-        
-        // Draw a line to show the corner name
-        final cornerNames = targetRoom.getCornerDescriptions();
-        final cornerName = cornerNames[cornerIndex];
-        
-        final textSpan = TextSpan(
-          text: cornerName,
-          style: const TextStyle(
-            color: Colors.green,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            backgroundColor: Colors.white70,
-          ),
-        );
-        
-        final textPainter = TextPainter(
-          text: textSpan,
-          textDirection: TextDirection.ltr,
-        );
-        
-        textPainter.layout();
-        textPainter.paint(
-          canvas,
-          Offset(
-            snappedPos.dx - textPainter.width / 2,
-            snappedPos.dy - 25,
-          ),
-        );
-        
-        // Draw arrow indicating snap direction
-        _drawSnapArrow(canvas, room.position, snappedPos);
-        
-        // Draw where it will snap to
-        final snapPreviewRect = Rect.fromCenter(
-          center: snappedPos,
-          width: room.width,
-          height: room.height,
-        );
-        
-        final snapPreviewPaint = Paint()
-          ..color = Colors.green.withOpacity(0.2)
-          ..style = PaintingStyle.fill;
-        
-        canvas.drawRect(snapPreviewRect, snapPreviewPaint);
-        
-        // Draw snapped position text
-        final snapText = "Snap: ${distance.toStringAsFixed(1)}px";
-        final snapSpan = TextSpan(
-          text: snapText,
-          style: const TextStyle(
-            color: Colors.green,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            backgroundColor: Colors.white70,
-          ),
-        );
-        
-        final snapTextPainter = TextPainter(
-          text: snapSpan,
-          textDirection: TextDirection.ltr,
-        );
-        
-        snapTextPainter.layout();
-        snapTextPainter.paint(
-          canvas,
-          Offset(
-            snappedPos.dx + 15,
-            snappedPos.dy + 15,
-          ),
-        );
-      } else {
-        // Not snapping to any corner - show current position
-        // Display current position coordinates
-        final posText = "(${room.position.dx.toStringAsFixed(1)}, "
-            "${room.position.dy.toStringAsFixed(1)})";
-        
-        final textSpan = TextSpan(
-          text: posText,
-          style: const TextStyle(
-            color: Colors.blue,
-            fontSize: 10,
-            backgroundColor: Colors.white70,
-          ),
-        );
-        
-        final textPainter = TextPainter(
-          text: textSpan,
-          textDirection: TextDirection.ltr,
-        );
-        
-        textPainter.layout();
-        textPainter.paint(
-          canvas,
-          Offset(
-            room.position.dx + 10,
-            room.position.dy - 20,
-          ),
-        );
-      }
-    }
-  }
-  
-  // Draw guidelines for element dragging
-  void _drawDraggingElementGuidelines(Canvas canvas, ArchitecturalElement element) {
-    if (enableGridSnap) {
-      // Draw grid snapping guidelines
-      // Calculate nearest grid point
-      final gridX = (element.position.dx / gridSize).round() * gridSize;
-      final gridY = (element.position.dy / gridSize).round() * gridSize;
-      final snappedPos = Offset(gridX, gridY);
-      
-      // Draw grid snap indicator
-      final gridSnapPaint = Paint()
-        ..color = Colors.green
-        ..strokeWidth = 2.0;
-      
-      // Draw a grid snap indicator
-      canvas.save();
-      canvas.translate(snappedPos.dx, snappedPos.dy);
-      
-      // Draw element preview at the grid point
-      final previewPaint = Paint()
-        ..color = Colors.green.withOpacity(0.5)
-        ..strokeWidth = 1.5
-        ..style = PaintingStyle.stroke;
-      
-      // Draw simple element preview
-      canvas.drawRect(
-        Rect.fromCenter(
-          center: Offset.zero,
-          width: element.width,
-          height: element.height,
-        ),
-        previewPaint,
-      );
-      
-      canvas.restore();
-      
-      // Draw position text
-      final posText = "Grid: (${(gridX / gridSize).round()}, ${(gridY / gridSize).round()})";
-      final textSpan = TextSpan(
-        text: posText,
-        style: const TextStyle(
-          color: Colors.green,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          backgroundColor: Colors.white70,
-        ),
-      );
-      
-      final textPainter = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      );
-      
-      textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(
-          snappedPos.dx + 15,
-          snappedPos.dy - 25,
-        ),
-      );
-    } else {
-      // Try to find closest corner
-      final cornerResult = ArchitecturalElement.findClosestCorner(element.position, rooms, cornerSnapDistance);
-      
-      if (cornerResult != null) {
-        final cornerPos = cornerResult.$1;
-        final room = cornerResult.$2;
-        final cornerIndex = cornerResult.$3;
-        final distance = cornerResult.$4;
-        
-        // Draw snap indicator
-        final snapHighlightPaint = Paint()
-          ..color = Colors.green
-          ..strokeWidth = 3.0
-          ..style = PaintingStyle.stroke;
-        
-        // Highlight the corner we're snapping to
-        canvas.drawCircle(cornerPos, 8.0, snapHighlightPaint);
-        
-        // Draw a line to show the corner name
-        final cornerNames = room.getCornerDescriptions();
-        final cornerName = cornerNames[cornerIndex];
-        
-        final textSpan = TextSpan(
-          text: cornerName,
-          style: const TextStyle(
-            color: Colors.green,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            backgroundColor: Colors.white70,
-          ),
-        );
-        
-        final textPainter = TextPainter(
-          text: textSpan,
-          textDirection: TextDirection.ltr,
-        );
-        
-        textPainter.layout();
-        textPainter.paint(
-          canvas,
-          Offset(
-            cornerPos.dx - textPainter.width / 2,
-            cornerPos.dy - 25,
-          ),
-        );
-        
-        // Draw arrow indicating snap direction
-        _drawSnapArrow(canvas, element.position, cornerPos);
-        
-        // Draw element preview at corner
-        _drawElementCornerPreview(canvas, element, cornerPos, cornerIndex);
-        
-        // Draw snapped position text
-        final snapText = "Snap: ${distance.toStringAsFixed(1)}px";
-        final snapSpan = TextSpan(
-          text: snapText,
-          style: const TextStyle(
-            color: Colors.green,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            backgroundColor: Colors.white70,
-          ),
-        );
-        
-        final snapTextPainter = TextPainter(
-          text: snapSpan,
-          textDirection: TextDirection.ltr,
-        );
-        
-        snapTextPainter.layout();
-        snapTextPainter.paint(
-          canvas,
-          Offset(
-            cornerPos.dx + 15,
-            cornerPos.dy + 15,
-          ),
-        );
-      } else {
-        // Try midpoint snapping
-        final midpointResult = Room.findClosestMidpoint(element.position, rooms, cornerSnapDistance);
-        
-        if (midpointResult != null) {
-          final midpointPos = midpointResult.$1;
-          final distance = midpointResult.$2;
-          
-          // Find which wall this midpoint belongs to
-          for (var room in rooms) {
-            for (var wallSegment in room.getWallSegments()) {
-              final wallMidpoint = Offset(
-                (wallSegment.$1.dx + wallSegment.$2.dx) / 2,
-                (wallSegment.$1.dy + wallSegment.$2.dy) / 2,
-              );
-              
-              if ((wallMidpoint - midpointPos).distanceSquared < 1.0) {
-                // Draw snap indicator
-                final snapHighlightPaint = Paint()
-                  ..color = Colors.green
-                  ..strokeWidth = 3.0
-                  ..style = PaintingStyle.stroke;
-                
-                // Highlight the midpoint we're snapping to
-                canvas.drawCircle(midpointPos, 6.0, snapHighlightPaint);
-                
-                // Draw arrow indicating snap direction
-                _drawSnapArrow(canvas, element.position, midpointPos);
-                
-                // Draw element preview at midpoint
-                _drawElementMidpointPreview(canvas, element, midpointPos, wallSegment);
-                
-                // Draw snapped position text
-                final snapText = "Wall Midpoint: ${distance.toStringAsFixed(1)}px";
-                final snapSpan = TextSpan(
-                  text: snapText,
-                  style: const TextStyle(
-                    color: Colors.green,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    backgroundColor: Colors.white70,
-                  ),
-                );
-                
-                final snapTextPainter = TextPainter(
-                  text: snapSpan,
-                  textDirection: TextDirection.ltr,
-                );
-                
-                snapTextPainter.layout();
-                snapTextPainter.paint(
-                  canvas,
-                  Offset(
-                    midpointPos.dx + 15,
-                    midpointPos.dy + 15,
-                  ),
-                );
-                
-                break;
-              }
+        // Find the closest corner from all other rooms
+        for (var targetRoom in otherRooms) {
+          final targetCorners = targetRoom.getCorners();
+          for (int i = 0; i < targetCorners.length; i++) {
+            final distance = (sourceCorner - targetCorners[i]).distance;
+            if (distance < minDistance) {
+              minDistance = distance;
+              closestCorner = targetCorners[i];
+              closestCornerIndex = i;
+              closestRoom = targetRoom;
             }
           }
+        }
+        
+        // If within snap distance, show the corner-to-corner snap preview
+        if (minDistance <= cornerSnapDistance) {
+          // Calculate where room would be positioned if snapped
+          final cornerDelta = closestCorner - sourceCorner;
+          final snappedRoomPos = room.position + cornerDelta;
+          
+          // Draw snap indicator
+          final snapHighlightPaint = Paint()
+            ..color = Colors.green
+            ..strokeWidth = 3.0
+            ..style = PaintingStyle.stroke;
+          
+          // Highlight both corners involved in the snap
+          canvas.drawCircle(sourceCorner, 7.0, snapHighlightPaint);
+          canvas.drawCircle(closestCorner, 7.0, snapHighlightPaint);
+          
+          // Draw arrow connecting the corners
+          _drawSnapArrow(canvas, sourceCorner, closestCorner);
+          
+          // Draw the name of the target corner
+          final targetCornerName = closestRoom.getCornerDescriptions()[closestCornerIndex];
+          final textSpan = TextSpan(
+            text: targetCornerName,
+            style: const TextStyle(
+              color: Colors.green,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              backgroundColor: Colors.white70,
+            ),
+          );
+          
+          final textPainter = TextPainter(
+            text: textSpan,
+            textDirection: TextDirection.ltr,
+          );
+          
+          textPainter.layout();
+          textPainter.paint(
+            canvas,
+            Offset(
+              closestCorner.dx - textPainter.width / 2,
+              closestCorner.dy - 25,
+            ),
+          );
+          
+          // Draw an outline of where the room would be if snapped
+          final snapPreviewPaint = Paint()
+            ..color = Colors.green.withOpacity(0.2)
+            ..style = PaintingStyle.fill;
+            
+          final outlinePaint = Paint()
+            ..color = Colors.green
+            ..strokeWidth = 1.5
+            ..style = PaintingStyle.stroke;
+            
+          // Draw a preview rectangle at the snapped position
+          final snapPreviewRect = Rect.fromCenter(
+            center: snappedRoomPos,
+            width: room.width,
+            height: room.height,
+          );
+          
+          canvas.drawRect(snapPreviewRect, snapPreviewPaint);
+          canvas.drawRect(snapPreviewRect, outlinePaint);
+          
+          // Draw snapped position text
+          final snapText = "Corner-to-corner: ${minDistance.toStringAsFixed(1)}px";
+          final snapSpan = TextSpan(
+            text: snapText,
+            style: const TextStyle(
+              color: Colors.green,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              backgroundColor: Colors.white70,
+            ),
+          );
+          
+          final snapTextPainter = TextPainter(
+            text: snapSpan,
+            textDirection: TextDirection.ltr,
+          );
+          
+          snapTextPainter.layout();
+          snapTextPainter.paint(
+            canvas,
+            Offset(
+              (sourceCorner.dx + closestCorner.dx) / 2 - snapTextPainter.width / 2,
+              (sourceCorner.dy + closestCorner.dy) / 2 - 20,
+            ),
+          );
         } else {
-          // Not snapping to any point - show current position
-          final posText = "(${element.position.dx.toStringAsFixed(1)}, "
-              "${element.position.dy.toStringAsFixed(1)})";
+          // Not snapping to any corner - show current position
+          final posText = "Position: (${room.position.dx.toStringAsFixed(1)}, "
+              "${room.position.dy.toStringAsFixed(1)})";
           
           final textSpan = TextSpan(
             text: posText,
@@ -819,11 +566,190 @@ class FloorPlanPainter extends CustomPainter {
           textPainter.paint(
             canvas,
             Offset(
-              element.position.dx + 10,
-              element.position.dy - 20,
+              room.position.dx + 10,
+              room.position.dy - 20,
             ),
           );
         }
+      }
+    } else if (enableGridSnap) {
+      // Use grid snapping only if explicitly enabled and no corner is being dragged
+      // Already handled in the previous implementation
+    }
+  }
+  
+  // Draw guidelines for element dragging
+  void _drawDraggingElementGuidelines(Canvas canvas, ArchitecturalElement element) {
+    // Similar to the previous implementation, but prioritize snap points
+    // Try to find closest corner
+    final cornerResult = ArchitecturalElement.findClosestCorner(element.position, rooms, cornerSnapDistance);
+    
+    if (cornerResult != null) {
+      final cornerPos = cornerResult.$1;
+      final room = cornerResult.$2;
+      final cornerIndex = cornerResult.$3;
+      final distance = cornerResult.$4;
+      
+      // Draw snap indicator
+      final snapHighlightPaint = Paint()
+        ..color = Colors.green
+        ..strokeWidth = 3.0
+        ..style = PaintingStyle.stroke;
+      
+      // Highlight the corner we're snapping to
+      canvas.drawCircle(cornerPos, 8.0, snapHighlightPaint);
+      
+      // Draw a line to show the corner name
+      final cornerNames = room.getCornerDescriptions();
+      final cornerName = cornerNames[cornerIndex];
+      
+      final textSpan = TextSpan(
+        text: cornerName,
+        style: const TextStyle(
+          color: Colors.green,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          backgroundColor: Colors.white70,
+        ),
+      );
+      
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      );
+      
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(
+          cornerPos.dx - textPainter.width / 2,
+          cornerPos.dy - 25,
+        ),
+      );
+      
+      // Draw arrow indicating snap direction
+      _drawSnapArrow(canvas, element.position, cornerPos);
+      
+      // Draw element preview at corner
+      _drawElementCornerPreview(canvas, element, cornerPos, cornerIndex);
+      
+      // Draw snapped position text
+      final snapText = "Corner Snap: ${distance.toStringAsFixed(1)}px";
+      final snapSpan = TextSpan(
+        text: snapText,
+        style: const TextStyle(
+          color: Colors.green,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          backgroundColor: Colors.white70,
+        ),
+      );
+      
+      final snapTextPainter = TextPainter(
+        text: snapSpan,
+        textDirection: TextDirection.ltr,
+      );
+      
+      snapTextPainter.layout();
+      snapTextPainter.paint(
+        canvas,
+        Offset(
+          cornerPos.dx + 15,
+          cornerPos.dy + 15,
+        ),
+      );
+    } else {
+      // Try midpoint snapping
+      final midpointResult = Room.findClosestMidpoint(element.position, rooms, cornerSnapDistance);
+      
+      if (midpointResult != null) {
+        final midpointPos = midpointResult.$1;
+        final distance = midpointResult.$2;
+        
+        // Find which wall this midpoint belongs to
+        for (var room in rooms) {
+          for (var wallSegment in room.getWallSegments()) {
+            final wallMidpoint = Offset(
+              (wallSegment.$1.dx + wallSegment.$2.dx) / 2,
+              (wallSegment.$1.dy + wallSegment.$2.dy) / 2,
+            );
+            
+            if ((wallMidpoint - midpointPos).distanceSquared < 1.0) {
+              // Draw snap indicator
+              final snapHighlightPaint = Paint()
+                ..color = Colors.green
+                ..strokeWidth = 3.0
+                ..style = PaintingStyle.stroke;
+              
+              // Highlight the midpoint we're snapping to
+              canvas.drawCircle(midpointPos, 6.0, snapHighlightPaint);
+              
+              // Draw arrow indicating snap direction
+              _drawSnapArrow(canvas, element.position, midpointPos);
+              
+              // Draw element preview at midpoint
+              _drawElementMidpointPreview(canvas, element, midpointPos, wallSegment);
+              
+              // Draw snapped position text
+              final snapText = "Wall Midpoint: ${distance.toStringAsFixed(1)}px";
+              final snapSpan = TextSpan(
+                text: snapText,
+                style: const TextStyle(
+                  color: Colors.green,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  backgroundColor: Colors.white70,
+                ),
+              );
+              
+              final snapTextPainter = TextPainter(
+                text: snapSpan,
+                textDirection: TextDirection.ltr,
+              );
+              
+              snapTextPainter.layout();
+              snapTextPainter.paint(
+                canvas,
+                Offset(
+                  midpointPos.dx + 15,
+                  midpointPos.dy + 15,
+                ),
+              );
+              
+              break;
+            }
+          }
+        }
+      } else if (enableGridSnap) {
+        // Use grid snapping only if explicitly enabled and no corners or midpoints are close
+        // Already handled in the previous implementation
+      } else {
+        // Not snapping to any point - show current position
+        final posText = "(${element.position.dx.toStringAsFixed(1)}, "
+            "${element.position.dy.toStringAsFixed(1)})";
+        
+        final textSpan = TextSpan(
+          text: posText,
+          style: const TextStyle(
+            color: Colors.blue,
+            fontSize: 10,
+            backgroundColor: Colors.white70,
+          ),
+        );
+        
+        final textPainter = TextPainter(
+          text: textSpan,
+          textDirection: TextDirection.ltr,
+        );
+        
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          Offset(
+            element.position.dx + 10,
+            element.position.dy - 20,
+          ),
+        );
       }
     }
   }

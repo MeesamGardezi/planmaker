@@ -3,12 +3,10 @@ import '../models/room.dart';
 import '../models/element.dart';
 
 class StatusBar extends StatelessWidget {
-  final double gridSize;
   final bool showGrid;
   final bool showMeasurements;
   final Room? selectedRoom;
   final ArchitecturalElement? selectedElement;
-  final Function(double) onGridSizeChanged;
   final VoidCallback onGridToggled;
   final VoidCallback onMeasurementsToggled;
   final VoidCallback onZoomIn;
@@ -17,12 +15,10 @@ class StatusBar extends StatelessWidget {
 
   const StatusBar({
     super.key,
-    required this.gridSize,
     required this.showGrid,
     required this.showMeasurements,
     required this.selectedRoom,
     required this.selectedElement,
-    required this.onGridSizeChanged,
     required this.onGridToggled,
     required this.onMeasurementsToggled,
     required this.onZoomIn,
@@ -46,27 +42,6 @@ class StatusBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Grid size control
-          Text(
-            "Grid:",
-            style: TextStyle(
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 100,
-            child: Slider(
-              value: gridSize,
-              min: 10,
-              max: 50,
-              divisions: 8,
-              onChanged: onGridSizeChanged,
-            ),
-          ),
-          
-          const SizedBox(width: 16),
-          
           // Zoom controls
           Text(
             "Zoom:",
@@ -108,6 +83,23 @@ class StatusBar extends StatelessWidget {
           ),
           
           const Spacer(),
+          
+          // Corner-to-corner snap info
+          Row(
+            children: [
+              Icon(Icons.connect_without_contact, color: Colors.green[700], size: 18),
+              const SizedBox(width: 4),
+              Text(
+                "Corner-to-corner snap enabled",
+                style: TextStyle(
+                  color: Colors.green[700],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(width: 16),
           
           // Editor status
           Text(

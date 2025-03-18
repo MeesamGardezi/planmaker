@@ -15,6 +15,9 @@ class Room {
   Offset? dragStartPosition;
   Offset? lastDragPosition;
   
+  // Track which corner was closest to the drag point (for corner-to-corner snapping)
+  int? draggedCornerIndex;
+  
   // Selection hitbox expansion (makes selection easier)
   final double selectionPadding = 5.0;
 
@@ -41,6 +44,21 @@ class Room {
     isDragging = true;
     dragStartPosition = point;
     lastDragPosition = point;
+    
+    // Determine which corner is closest to the drag point
+    final corners = getCorners();
+    double minDistance = double.infinity;
+    
+    for (int i = 0; i < corners.length; i++) {
+      final distance = (corners[i] - point).distance;
+      if (distance < minDistance) {
+        minDistance = distance;
+        draggedCornerIndex = i;
+      }
+    }
+    
+    // Debug info
+    print("Started drag near corner $draggedCornerIndex");
   }
   
   void drag(Offset point) {
@@ -55,6 +73,7 @@ class Room {
     isDragging = false;
     dragStartPosition = null;
     lastDragPosition = null;
+    // DO NOT clear draggedCornerIndex here - we need it for the snap!
   }
   
   void move(Offset delta) {
@@ -90,6 +109,11 @@ class Room {
       Offset(position.dx + halfWidth, position.dy + halfHeight), // Bottom-right
       Offset(position.dx - halfWidth, position.dy + halfHeight), // Bottom-left
     ];
+  }
+  
+  // Get opposite corner index
+  int getOppositeCornerIndex(int cornerIndex) {
+    return (cornerIndex + 2) % 4;
   }
   
   // Get corner descriptions for tooltips and display

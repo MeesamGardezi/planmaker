@@ -28,7 +28,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   bool showMeasurements = true;
   
   // Grid and measurement settings
-  double gridSize = 20.0;
+  double gridSize = 20.0; // Fixed grid size
   double gridRealSize = 1.0;
   MeasurementUnit unit = MeasurementUnit.meters;
   
@@ -45,8 +45,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   
   // Corner snapping
   double cornerSnapDistance = 25.0;
-  double gridSnapDistance = 10.0; // Add grid snapping distance
-  bool enableGridSnap = true; // Enable grid snapping by default
+  bool enableGridSnap = false; // Always use corner-to-corner snapping
   
   // Room counter
   int roomCounter = 1;
@@ -89,11 +88,6 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       );
       // Position new room to the right of existing rooms with some margin
       position = Offset(maxX + 120, position.dy);
-    }
-    
-    // Snap position to grid
-    if (enableGridSnap) {
-      position = _snapToGrid(position);
     }
     
     // Create new room
@@ -245,12 +239,6 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     });
   }
   
-  void _handleGridSizeChange(double newSize) {
-    setState(() {
-      gridSize = newSize;
-    });
-  }
-  
   void _handleGridRealSizeChange(double newSize) {
     setState(() {
       gridRealSize = newSize;
@@ -332,31 +320,9 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Grid Settings
+              // Grid Settings (simplified)
               const Text("Grid Settings", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              
-              // Grid Size Slider
-              Row(
-                children: [
-                  const Text("Grid Size: "),
-                  Expanded(
-                    child: Slider(
-                      value: gridSize,
-                      min: 10,
-                      max: 50,
-                      divisions: 8,
-                      label: gridSize.round().toString(),
-                      onChanged: (value) {
-                        setState(() {
-                          gridSize = value;
-                        });
-                      },
-                    ),
-                  ),
-                  Text("${gridSize.round()}px"),
-                ],
-              ),
               
               // Grid Real Size
               Row(
@@ -380,22 +346,10 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
                 ],
               ),
               
-              // Grid Snapping
-              CheckboxListTile(
-                title: const Text("Enable Grid Snapping"),
-                value: enableGridSnap,
-                onChanged: (value) {
-                  setState(() {
-                    enableGridSnap = value ?? true;
-                  });
-                },
-                contentPadding: EdgeInsets.zero,
-              ),
-              
               const SizedBox(height: 16),
               
               // Corner Snap Settings
-              const Text("Corner Snap Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text("Box Snapping Settings", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               
               Row(
@@ -621,20 +575,11 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       }
     }
     else if (mode == EditorMode.room) {
-      Offset position;
-      
-      if (enableGridSnap) {
-        // Snap to grid first
-        position = _snapToGrid(point);
-      } else {
-        // Try to snap to corner if grid snap is disabled
-        position = _snapToNearbyCorner(point, []);
-      }
-      
+      // Create new room at the pointer position
       final newRoom = Room(
         name: 'Room ${roomCounter++}',
         color: roomColors[(rooms.length) % roomColors.length],
-        position: position,
+        position: point,
         width: 200,
         height: 150,
       );
@@ -669,26 +614,12 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     if (isDraggingAnyObject) {
       setState(() {
         if (selectedElement != null && selectedElement!.isDragging) {
-          // Option: Apply live snapping during drag for immediate feedback
-          if (enableGridSnap) {
-            Offset snapPoint = _snapToGrid(point);
-            selectedElement!.dragStartPosition = snapPoint;
-            selectedElement!.lastDragPosition = snapPoint;
-            selectedElement!.position = snapPoint;
-          } else {
-            selectedElement!.drag(point);
-          }
+          // Apply live dragging for elements
+          selectedElement!.drag(point);
         }
         else if (selectedRoom != null && selectedRoom!.isDragging) {
-          // Option: Apply live snapping during drag for immediate feedback
-          if (enableGridSnap) {
-            Offset snapPoint = _snapToGrid(point);
-            selectedRoom!.dragStartPosition = snapPoint;
-            selectedRoom!.lastDragPosition = snapPoint;
-            selectedRoom!.position = snapPoint;
-          } else {
-            selectedRoom!.drag(point);
-          }
+          // Apply live dragging for rooms
+          selectedRoom!.drag(point);
         }
       });
     }
@@ -706,23 +637,15 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     if (isDraggingAnyObject) {
       setState(() {
         if (selectedElement != null && selectedElement!.isDragging) {
-          // Apply final snapping - prioritize grid snap if enabled
-          if (enableGridSnap) {
-            selectedElement!.position = _snapToGrid(selectedElement!.position);
-          } else {
-            // Try corner/midpoint snapping if grid snap is disabled
-            _snapElementToNearbyCornersOrMidpoints(selectedElement!);
-          }
+          // Apply final element snapping
+          _snapElementToNearbyCornersOrMidpoints(selectedElement!);
           selectedElement!.endDrag();
         }
         else if (selectedRoom != null && selectedRoom!.isDragging) {
-          // Apply final snapping - prioritize grid snap if enabled
-          if (enableGridSnap) {
-            selectedRoom!.position = _snapToGrid(selectedRoom!.position);
-          } else {
-            // Try corner snapping if grid snap is disabled
-            final otherRooms = rooms.where((r) => r != selectedRoom).toList();
-            selectedRoom!.position = _snapToNearbyCorner(selectedRoom!.position, [selectedRoom!]);
+          // Apply final corner-to-corner room snapping
+          if (!_snapRoomCornerToCorner(selectedRoom!)) {
+            // Debug info if snap fails
+            print("Snap failed - no matching corners found within distance");
           }
           selectedRoom!.endDrag();
         }
@@ -827,36 +750,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     return null;
   }
   
-  // Snap to nearby corners for rooms
-  Offset _snapToNearbyCorner(Offset position, List<Room> excludeRooms) {
-    // Get rooms for snapping (exclude certain rooms if needed)
-    final snapRooms = rooms.where((r) => !excludeRooms.contains(r)).toList();
-    
-    if (snapRooms.isEmpty) {
-      return position; // No rooms to snap to
-    }
-    
-    // Try to find corner to snap to
-    final cornerResult = Room.findClosestCorner(position, snapRooms, cornerSnapDistance);
-    
-    if (cornerResult != null) {
-      // Return the corner position
-      return cornerResult.$1;
-    }
-    
-    // If no corners are close enough, return the original position
-    return position;
-  }
-  
-  // Snap to grid
-  Offset _snapToGrid(Offset position) {
-    return Offset(
-      (position.dx / gridSize).round() * gridSize,
-      (position.dy / gridSize).round() * gridSize,
-    );
-  }
-  
-  // Snap elements to the nearest corner or midpoint
+  // Snap element to the nearest corner or midpoint
   bool _snapElementToNearbyCornersOrMidpoints(ArchitecturalElement element) {
     // Try to find a corner
     final cornerResult = ArchitecturalElement.findClosestCorner(
@@ -900,6 +794,69 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           }
         }
       }
+    }
+    
+    return false;
+  }
+  
+  // Fixed corner-to-corner room snapping
+  bool _snapRoomCornerToCorner(Room room) {
+    // Get rooms for snapping (exclude the room being dragged)
+    final targetRooms = rooms.where((r) => r != room).toList();
+    
+    if (targetRooms.isEmpty) return false;
+    
+    // Make sure we have a dragged corner
+    if (room.draggedCornerIndex == null) {
+      print("No dragged corner index");
+      return false;
+    }
+    
+    final sourceCornerIndex = room.draggedCornerIndex!;
+    final sourceCorners = room.getCorners();
+    final sourceCorner = sourceCorners[sourceCornerIndex];
+    
+    // Find closest target corner within snap distance
+    var minDistance = double.infinity;
+    Offset? closestTargetCorner;
+    
+    for (var targetRoom in targetRooms) {
+      final targetCorners = targetRoom.getCorners();
+      for (int i = 0; i < targetCorners.length; i++) {
+        final distance = (sourceCorner - targetCorners[i]).distance;
+        if (distance < minDistance && distance <= cornerSnapDistance) {
+          minDistance = distance;
+          closestTargetCorner = targetCorners[i];
+        }
+      }
+    }
+    
+    // If we found a corner within snap distance
+    if (closestTargetCorner != null) {
+      // Calculate the delta needed to move source corner to target corner
+      final cornerDelta = closestTargetCorner - sourceCorner;
+      
+      // Calculate new room position by applying that delta
+      final oldPosition = room.position;
+      final newPosition = oldPosition + cornerDelta;
+      
+      print("Snapping: Corner delta: $cornerDelta");
+      print("Old position: $oldPosition");
+      print("New position: $newPosition");
+      
+      // First store the old position to calculate element position updates
+      final oldRoomPos = room.position;
+      
+      // Update room position
+      room.position = newPosition;
+      
+      // Calculate the delta and update all child elements
+      final positionDelta = newPosition - oldRoomPos;
+      for (var element in room.elements) {
+        element.position += positionDelta;
+      }
+      
+      return true;
     }
     
     return false;
@@ -969,12 +926,10 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           
           // Bottom Status Bar
           StatusBar(
-            gridSize: gridSize,
             showGrid: showGrid,
             showMeasurements: showMeasurements,
             selectedRoom: selectedRoom,
             selectedElement: selectedElement,
-            onGridSizeChanged: _handleGridSizeChange,
             onGridToggled: _handleGridToggle,
             onMeasurementsToggled: _handleMeasurementsToggle,
             onZoomIn: () => _handleZoom(1.2),
