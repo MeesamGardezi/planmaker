@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/room.dart';
 import '../models/element.dart';
+import '../models/enums.dart';
 
 class StatusBar extends StatelessWidget {
   final bool showGrid;
@@ -12,6 +13,7 @@ class StatusBar extends StatelessWidget {
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
   final VoidCallback onResetView;
+  final SnapType snapType;
 
   const StatusBar({
     super.key,
@@ -24,6 +26,7 @@ class StatusBar extends StatelessWidget {
     required this.onZoomIn,
     required this.onZoomOut,
     required this.onResetView,
+    this.snapType = SnapType.none,
   });
 
   @override
@@ -84,20 +87,8 @@ class StatusBar extends StatelessWidget {
           
           const Spacer(),
           
-          // Corner-to-corner snap info
-          Row(
-            children: [
-              Icon(Icons.connect_without_contact, color: Colors.green[700], size: 18),
-              const SizedBox(width: 4),
-              Text(
-                "Corner-to-corner snap enabled",
-                style: TextStyle(
-                  color: Colors.green[700],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ),
+          // Snap type indicator
+          _buildSnapTypeIndicator(),
           
           const SizedBox(width: 16),
           
@@ -110,6 +101,47 @@ class StatusBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+  
+  // New method to build the snap type indicator
+  Widget _buildSnapTypeIndicator() {
+    Color indicatorColor;
+    IconData indicatorIcon;
+    String indicatorText;
+    
+    switch (snapType) {
+      case SnapType.none:
+        return const SizedBox(); // Don't show anything when no snapping
+      case SnapType.corner:
+        indicatorColor = Colors.blue;
+        indicatorIcon = Icons.fullscreen_exit;
+        indicatorText = "Corner Snap";
+        break;
+      case SnapType.wall:
+        indicatorColor = Colors.green;
+        indicatorIcon = Icons.horizontal_rule;
+        indicatorText = "Wall Snap";
+        break;
+      case SnapType.midpoint:
+        indicatorColor = Colors.orange;
+        indicatorIcon = Icons.fiber_manual_record;
+        indicatorText = "Midpoint Snap";
+        break;
+    }
+    
+    return Row(
+      children: [
+        Icon(indicatorIcon, color: indicatorColor, size: 18),
+        const SizedBox(width: 4),
+        Text(
+          indicatorText,
+          style: TextStyle(
+            color: indicatorColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }

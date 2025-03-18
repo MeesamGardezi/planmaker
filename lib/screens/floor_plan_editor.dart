@@ -43,15 +43,23 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   // Interaction state flags
   bool isDraggingAnyObject = false;
   
-  // Corner snapping
-  double cornerSnapDistance = 25.0;
-  bool enableGridSnap = false; // Always use corner-to-corner snapping
+  // Snapping
+  double snapDistance = 25.0; // Universal snap distance for all snap types
+  bool enableGridSnap = false; // Always use intelligent snapping
+  
+  // Snap type tracking
+  SnapType currentSnapType = SnapType.none;
   
   // Room counter
   int roomCounter = 1;
   
   // Wall thickness
   double wallThickness = 4.0;
+  
+  // Current snap information
+  Room? targetSnapRoom;
+  int? sourceWallIndex;
+  int? targetWallIndex;
   
   // Colors
   final List<Color> roomColors = [
@@ -112,6 +120,10 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   
   void _deleteRoom(Room room) {
     setState(() {
+      // Clear shared wall connections
+      room.clearSharedWalls();
+      
+      // Remove room
       rooms.remove(room);
       
       if (selectedRoom == room) {
@@ -182,12 +194,14 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   void _handleRoomWidthChange(Room room, double newWidth) {
     setState(() {
       room.width = newWidth;
+      _updateSharedWallsAfterRoomChange(room);
     });
   }
   
   void _handleRoomHeightChange(Room room, double newHeight) {
     setState(() {
       room.height = newHeight;
+      _updateSharedWallsAfterRoomChange(room);
     });
   }
   
@@ -348,8 +362,8 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
               
               const SizedBox(height: 16),
               
-              // Corner Snap Settings
-              const Text("Box Snapping Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+              // Snapping Settings
+              const Text("Snapping Settings", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               
               Row(
@@ -357,19 +371,19 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
                   const Text("Snap Distance: "),
                   Expanded(
                     child: Slider(
-                      value: cornerSnapDistance,
+                      value: snapDistance,
                       min: 5,
                       max: 50,
                       divisions: 9,
-                      label: cornerSnapDistance.round().toString(),
+                      label: snapDistance.round().toString(),
                       onChanged: (value) {
                         setState(() {
-                          cornerSnapDistance = value;
+                          snapDistance = value;
                         });
                       },
                     ),
                   ),
-                  Text("${cornerSnapDistance.round()}px"),
+                  Text("${snapDistance.round()}px"),
                 ],
               ),
               
@@ -484,6 +498,12 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           isDraggingAnyObject = true;
           room.startDrag(point);
           _selectRoom(room);
+          
+          // Reset snap tracking
+          currentSnapType = SnapType.none;
+          targetSnapRoom = null;
+          sourceWallIndex = null;
+          targetWallIndex = null;
         });
         return;
       }
@@ -501,8 +521,27 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       }
     }
     else if (mode == EditorMode.door || mode == EditorMode.window) {
+      // Try to find any wall to place element on
+      final wallResult = Room.findClosestWallPoint(point, rooms, snapDistance);
+      
+      if (wallResult != null) {
+        final snapPoint = wallResult.$1;
+        final wall = wallResult.$3;
+        final room = wallResult.$4;
+        
+        _addElementToWall(
+          room,
+          snapPoint,
+          wall,
+          mode == EditorMode.door 
+              ? ElementType.door 
+              : ElementType.window
+        );
+        return;
+      }
+      
       // Try to find any corner to place element at
-      final cornerResult = Room.findClosestCorner(point, rooms, cornerSnapDistance);
+      final cornerResult = Room.findClosestCorner(point, rooms, snapDistance);
       
       if (cornerResult != null) {
         final cornerPos = cornerResult.$1;
@@ -517,36 +556,6 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
               ? ElementType.door 
               : ElementType.window
         );
-      }
-      else {
-        // Try to find midpoint of a wall
-        final midpointResult = Room.findClosestMidpoint(point, rooms, cornerSnapDistance);
-        
-        if (midpointResult != null) {
-          final midpointPos = midpointResult.$1;
-          
-          // Find which wall this midpoint belongs to
-          for (var room in rooms) {
-            for (var wallSegment in room.getWallSegments()) {
-              final wallMidpoint = Offset(
-                (wallSegment.$1.dx + wallSegment.$2.dx) / 2,
-                (wallSegment.$1.dy + wallSegment.$2.dy) / 2,
-              );
-              
-              if ((wallMidpoint - midpointPos).distanceSquared < 1.0) {
-                _addElementToWallMidpoint(
-                  room,
-                  midpointPos,
-                  wallSegment,
-                  mode == EditorMode.door 
-                      ? ElementType.door 
-                      : ElementType.window
-                );
-                break;
-              }
-            }
-          }
-        }
       }
     }
     else if (mode == EditorMode.delete) {
@@ -591,6 +600,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         // Add and select new room
         rooms.add(newRoom);
         _selectRoom(newRoom);
+        showRightPanel = true;
       });
     }
   }
@@ -616,10 +626,16 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         if (selectedElement != null && selectedElement!.isDragging) {
           // Apply live dragging for elements
           selectedElement!.drag(point);
+          
+          // Check for potential snaps during dragging (for visual feedback)
+          _checkElementSnapDuringDrag(selectedElement!);
         }
         else if (selectedRoom != null && selectedRoom!.isDragging) {
           // Apply live dragging for rooms
           selectedRoom!.drag(point);
+          
+          // Check for potential snaps during dragging (for visual feedback)
+          _checkRoomSnapDuringDrag(selectedRoom!);
         }
       });
     }
@@ -638,15 +654,22 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       setState(() {
         if (selectedElement != null && selectedElement!.isDragging) {
           // Apply final element snapping
-          _snapElementToNearbyCornersOrMidpoints(selectedElement!);
+          _snapElementToWall(selectedElement!);
           selectedElement!.endDrag();
         }
         else if (selectedRoom != null && selectedRoom!.isDragging) {
-          // Apply final corner-to-corner room snapping
-          if (!_snapRoomCornerToCorner(selectedRoom!)) {
-            // Debug info if snap fails
-            print("Snap failed - no matching corners found within distance");
+          // Try to snap walls
+          if (_applyRoomWallSnap(selectedRoom!)) {
+            // Update shared walls
+            _updateSharedWalls();
+          } else {
+            // Reset snap type if no snap occurred
+            currentSnapType = SnapType.none;
+            targetSnapRoom = null;
+            sourceWallIndex = null;
+            targetWallIndex = null;
           }
+          
           selectedRoom!.endDrag();
         }
         
@@ -654,17 +677,226 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       });
     }
   }
-
-  void _addElementToCorner(Room room, Offset cornerPos, int cornerIndex, ElementType type) {
+  
+  // Check and track potential room wall snaps during drag
+  void _checkRoomSnapDuringDrag(Room room) {
+    // Reset current snap info
+    currentSnapType = SnapType.none;
+    targetSnapRoom = null;
+    sourceWallIndex = null;
+    targetWallIndex = null;
+    
+    // Get other rooms for snapping
+    final otherRooms = rooms.where((r) => r != room).toList();
+    if (otherRooms.isEmpty) return;
+    
+    // Find possible wall alignments
+    final alignments = Room.findAllPossibleWallAlignments(room, otherRooms, snapDistance);
+    
+    if (alignments.isNotEmpty) {
+      // Use the closest alignment
+      final bestAlignment = alignments.first;
+      
+      // Update snap info
+      currentSnapType = SnapType.wall;
+      targetSnapRoom = bestAlignment.$2;
+      sourceWallIndex = bestAlignment.$3;
+      targetWallIndex = bestAlignment.$4;
+    }
+  }
+  
+  // Check element snap during drag (for visual feedback)
+  void _checkElementSnapDuringDrag(ArchitecturalElement element) {
+    // Try to find nearest wall
+    final wallResult = Room.findClosestWallPoint(
+      element.position, 
+      rooms, 
+      snapDistance
+    );
+    
+    if (wallResult != null) {
+      currentSnapType = SnapType.wall;
+      return;
+    }
+    
+    // Check for corner snap
+    final cornerResult = Room.findClosestCorner(
+      element.position, 
+      rooms, 
+      snapDistance
+    );
+    
+    if (cornerResult != null) {
+      currentSnapType = SnapType.corner;
+      return;
+    }
+    
+    // No snap found
+    currentSnapType = SnapType.none;
+  }
+  
+  // Apply wall-to-wall room snapping
+  bool _applyRoomWallSnap(Room room) {
+    // Get other rooms for snapping
+    final otherRooms = rooms.where((r) => r != room).toList();
+    if (otherRooms.isEmpty) return false;
+    
+    // If we have tracked a potential snap during drag, use that
+    if (currentSnapType == SnapType.wall && 
+        targetSnapRoom != null && 
+        sourceWallIndex != null && 
+        targetWallIndex != null) {
+      
+      // Get the walls
+      final sourceWalls = room.getWallSegments();
+      final targetWalls = targetSnapRoom!.getWallSegments();
+      
+      final sourceWall = sourceWalls[sourceWallIndex!];
+      final targetWall = targetWalls[targetWallIndex!];
+      
+      // Calculate alignment offset
+      final alignmentOffset = Room.getWallAlignmentOffset(sourceWall, targetWall);
+      
+      // Apply the offset
+      room.move(alignmentOffset);
+      
+      return true;
+    }
+    
+    // If no snap was tracked during drag, find the best now
+    final alignmentResult = Room.findBestWallAlignment(room, otherRooms.first, snapDistance);
+    
+    if (alignmentResult != null) {
+      // Apply the offset
+      room.move(alignmentResult.$1);
+      
+      // Update snap info
+      sourceWallIndex = alignmentResult.$2;
+      targetWallIndex = alignmentResult.$3;
+      targetSnapRoom = otherRooms.first;
+      currentSnapType = SnapType.wall;
+      
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // Snap element to the nearest wall
+  bool _snapElementToWall(ArchitecturalElement element) {
+    // Try to find nearest wall
+    final wallResult = Room.findClosestWallPoint(
+      element.position, 
+      rooms, 
+      snapDistance
+    );
+    
+    if (wallResult != null) {
+      final snapPoint = wallResult.$1;
+      final wall = wallResult.$3;
+      final room = wallResult.$4;
+      
+      // Calculate wall angle
+      final wallVector = wall.$2 - wall.$1;
+      final wallAngle = math.atan2(wallVector.dy, wallVector.dx);
+      
+      // Set position and rotation
+      element.position = snapPoint;
+      
+      // Perpendicular to wall
+      element.rotation = wallAngle + math.pi / 2;
+      
+      // Adjust position slightly away from wall
+      final perpOffset = element.height / 2;
+      element.position = Offset(
+        snapPoint.dx + math.cos(element.rotation) * perpOffset,
+        snapPoint.dy + math.sin(element.rotation) * perpOffset
+      );
+      
+      // Update element's room reference
+      element.room = room;
+      
+      currentSnapType = SnapType.wall;
+      return true;
+    }
+    
+    // Try to find a corner as fallback
+    final cornerResult = Room.findClosestCorner(
+      element.position, 
+      rooms, 
+      snapDistance
+    );
+    
+    if (cornerResult != null) {
+      final cornerPos = cornerResult.$1;
+      final room = cornerResult.$4;
+      final cornerIndex = cornerResult.$3;
+      
+      // Set position
+      element.position = cornerPos;
+      
+      // Calculate angle based on corner
+      double angle;
+      switch (cornerIndex) {
+        case 0: // Top-left
+          angle = -math.pi / 4; // 45 degrees inward
+          break;
+        case 1: // Top-right
+          angle = -3 * math.pi / 4; // 135 degrees inward
+          break;
+        case 2: // Bottom-right
+          angle = 3 * math.pi / 4; // 225 degrees inward
+          break;
+        case 3: // Bottom-left
+          angle = math.pi / 4; // 315 degrees inward
+          break;
+        default:
+          angle = 0;
+      }
+      
+      // Set the rotation
+      element.rotation = angle;
+      
+      // Update the room reference
+      element.room = room;
+      
+      // Offset position slightly from corner
+      final offsetDistance = element.width / 4;
+      element.position = Offset(
+        cornerPos.dx + math.cos(angle) * offsetDistance,
+        cornerPos.dy + math.sin(angle) * offsetDistance
+      );
+      
+      currentSnapType = SnapType.corner;
+      return true;
+    }
+    
+    currentSnapType = SnapType.none;
+    return false;
+  }
+  
+  // Add element to a wall at a specific point
+  void _addElementToWall(Room room, Offset position, (Offset, Offset) wall, ElementType type) {
     // Create element
     final element = ArchitecturalElement(
       type: type,
-      position: cornerPos, // Will be adjusted in snapToCorner
+      position: position,
       room: room,
     );
     
-    // Snap to corner
-    element.snapToCorner(cornerPos, room, cornerIndex);
+    // Calculate wall angle
+    final wallVector = wall.$2 - wall.$1;
+    final wallAngle = math.atan2(wallVector.dy, wallVector.dx);
+    
+    // Set rotation perpendicular to wall
+    element.rotation = wallAngle + math.pi / 2;
+    
+    // Adjust position slightly away from wall
+    final perpOffset = element.height / 2;
+    element.position = Offset(
+      position.dx + math.cos(element.rotation) * perpOffset,
+      position.dy + math.sin(element.rotation) * perpOffset
+    );
     
     setState(() {
       room.elements.add(element);
@@ -680,16 +912,42 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     });
   }
   
-  void _addElementToWallMidpoint(Room room, Offset midpointPos, (Offset, Offset) wallSegment, ElementType type) {
+  void _addElementToCorner(Room room, Offset cornerPos, int cornerIndex, ElementType type) {
     // Create element
     final element = ArchitecturalElement(
       type: type,
-      position: midpointPos, // Will be adjusted in snapToWallMidpoint
+      position: cornerPos,
       room: room,
     );
     
-    // Snap to midpoint
-    element.snapToWallMidpoint(midpointPos, wallSegment);
+    // Calculate angle based on corner
+    double angle;
+    switch (cornerIndex) {
+      case 0: // Top-left
+        angle = -math.pi / 4; // 45 degrees inward
+        break;
+      case 1: // Top-right
+        angle = -3 * math.pi / 4; // 135 degrees inward
+        break;
+      case 2: // Bottom-right
+        angle = 3 * math.pi / 4; // 225 degrees inward
+        break;
+      case 3: // Bottom-left
+        angle = math.pi / 4; // 315 degrees inward
+        break;
+      default:
+        angle = 0;
+    }
+    
+    // Set the rotation
+    element.rotation = angle;
+    
+    // Offset position slightly from corner
+    final offsetDistance = element.width / 4;
+    element.position = Offset(
+      cornerPos.dx + math.cos(angle) * offsetDistance,
+      cornerPos.dy + math.sin(angle) * offsetDistance
+    );
     
     setState(() {
       room.elements.add(element);
@@ -703,6 +961,44 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       // Switch to select mode
       mode = EditorMode.select;
     });
+  }
+  
+  // Update shared walls after room dimensions change
+  void _updateSharedWallsAfterRoomChange(Room room) {
+    // First, remove all existing shared wall connections for this room
+    room.clearSharedWalls();
+    
+    // Then check for new connections
+    _updateSharedWalls();
+  }
+  
+  // Update shared wall connections for all rooms
+  void _updateSharedWalls() {
+    // First, clear all shared wall connections
+    for (var room in rooms) {
+      room.clearSharedWalls();
+    }
+    
+    // Re-establish shared wall connections
+    for (int i = 0; i < rooms.length; i++) {
+      for (int j = i + 1; j < rooms.length; j++) {
+        final room1 = rooms[i];
+        final room2 = rooms[j];
+        
+        final walls1 = room1.getWallSegments();
+        final walls2 = room2.getWallSegments();
+        
+        // Check all wall pairs
+        for (int w1 = 0; w1 < walls1.length; w1++) {
+          for (int w2 = 0; w2 < walls2.length; w2++) {
+            if (Room.doWallsOverlap(walls1[w1], walls2[w2], 1.0)) {
+              // Mark walls as shared
+              room1.addSharedWall(room2, w1, w2);
+            }
+          }
+        }
+      }
+    }
   }
 
   // Finds element at given point with tolerance consideration
@@ -748,118 +1044,6 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     }
     
     return null;
-  }
-  
-  // Snap element to the nearest corner or midpoint
-  bool _snapElementToNearbyCornersOrMidpoints(ArchitecturalElement element) {
-    // Try to find a corner
-    final cornerResult = ArchitecturalElement.findClosestCorner(
-      element.position, 
-      rooms, 
-      cornerSnapDistance
-    );
-    
-    if (cornerResult != null) {
-      final cornerPos = cornerResult.$1;
-      final room = cornerResult.$2;
-      final cornerIndex = cornerResult.$3;
-      
-      // Snap element to corner
-      element.snapToCorner(cornerPos, room, cornerIndex);
-      return true;
-    }
-    
-    // Try to find a wall midpoint
-    final midpointResult = Room.findClosestMidpoint(
-      element.position, 
-      rooms, 
-      cornerSnapDistance
-    );
-    
-    if (midpointResult != null) {
-      final midpointPos = midpointResult.$1;
-      
-      // Find which wall this midpoint belongs to
-      for (var room in rooms) {
-        for (var wallSegment in room.getWallSegments()) {
-          final wallMidpoint = Offset(
-            (wallSegment.$1.dx + wallSegment.$2.dx) / 2,
-            (wallSegment.$1.dy + wallSegment.$2.dy) / 2,
-          );
-          
-          if ((wallMidpoint - midpointPos).distanceSquared < 1.0) {
-            // Snap element to midpoint
-            element.snapToWallMidpoint(midpointPos, wallSegment);
-            return true;
-          }
-        }
-      }
-    }
-    
-    return false;
-  }
-  
-  // Fixed corner-to-corner room snapping
-  bool _snapRoomCornerToCorner(Room room) {
-    // Get rooms for snapping (exclude the room being dragged)
-    final targetRooms = rooms.where((r) => r != room).toList();
-    
-    if (targetRooms.isEmpty) return false;
-    
-    // Make sure we have a dragged corner
-    if (room.draggedCornerIndex == null) {
-      print("No dragged corner index");
-      return false;
-    }
-    
-    final sourceCornerIndex = room.draggedCornerIndex!;
-    final sourceCorners = room.getCorners();
-    final sourceCorner = sourceCorners[sourceCornerIndex];
-    
-    // Find closest target corner within snap distance
-    var minDistance = double.infinity;
-    Offset? closestTargetCorner;
-    
-    for (var targetRoom in targetRooms) {
-      final targetCorners = targetRoom.getCorners();
-      for (int i = 0; i < targetCorners.length; i++) {
-        final distance = (sourceCorner - targetCorners[i]).distance;
-        if (distance < minDistance && distance <= cornerSnapDistance) {
-          minDistance = distance;
-          closestTargetCorner = targetCorners[i];
-        }
-      }
-    }
-    
-    // If we found a corner within snap distance
-    if (closestTargetCorner != null) {
-      // Calculate the delta needed to move source corner to target corner
-      final cornerDelta = closestTargetCorner - sourceCorner;
-      
-      // Calculate new room position by applying that delta
-      final oldPosition = room.position;
-      final newPosition = oldPosition + cornerDelta;
-      
-      print("Snapping: Corner delta: $cornerDelta");
-      print("Old position: $oldPosition");
-      print("New position: $newPosition");
-      
-      // First store the old position to calculate element position updates
-      final oldRoomPos = room.position;
-      
-      // Update room position
-      room.position = newPosition;
-      
-      // Calculate the delta and update all child elements
-      final positionDelta = newPosition - oldRoomPos;
-      for (var element in room.elements) {
-        element.position += positionDelta;
-      }
-      
-      return true;
-    }
-    
-    return false;
   }
 
   // Transform point from screen space to canvas space
@@ -935,6 +1119,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
             onZoomIn: () => _handleZoom(1.2),
             onZoomOut: () => _handleZoom(0.8),
             onResetView: _resetView,
+            snapType: currentSnapType,
           ),
         ],
       ),
@@ -970,8 +1155,12 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
               showMeasurements: showMeasurements,
               wallThickness: wallThickness,
               isDragging: isDraggingAnyObject || isCanvasDragging,
-              cornerSnapDistance: cornerSnapDistance,
+              snapDistance: snapDistance,
               enableGridSnap: enableGridSnap,
+              currentSnapType: currentSnapType,
+              targetSnapRoom: targetSnapRoom,
+              sourceWallIndex: sourceWallIndex,
+              targetWallIndex: targetWallIndex,
             ),
           ),
         ),
