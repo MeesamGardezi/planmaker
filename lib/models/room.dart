@@ -20,8 +20,7 @@ class Wall {
   });
 
   // Deep copy constructor
-  Wall.clone(Wall source)
-      : height = source.height;
+  Wall.clone(Wall source) : height = source.height;
 }
 
 class Room {
@@ -144,10 +143,20 @@ class Room {
   // Get wall descriptions for tooltips and display
   List<String> getWallDescriptions() {
     return [
-      "Top wall",
-      "Right wall",
-      "Bottom wall",
-      "Left wall",
+      "$name - A", // Top wall (0)
+      "$name - B", // Right wall (1)
+      "$name - C", // Bottom wall (2)
+      "$name - D", // Left wall (3)
+    ];
+  }
+
+// Get short wall descriptions (without room name) for properties panel
+  List<String> getShortWallDescriptions() {
+    return [
+      "A", // Top wall (0)
+      "B", // Right wall (1)
+      "C", // Bottom wall (2)
+      "D", // Left wall (3)
     ];
   }
 
@@ -287,8 +296,6 @@ class Room {
         : null;
   }
 
-  
-  
   // Check if two walls are parallel
   static bool areWallsParallel((Offset, Offset) wall1, (Offset, Offset) wall2) {
     final wall1Vector = wall1.$2 - wall1.$1;
@@ -313,9 +320,10 @@ class Room {
     // More lenient check (0.85 instead of 0.9)
     return (dot.abs() > 0.85) && (isHorizontal1 == isHorizontal2);
   }
-  
+
   // Get wall alignment offset to align a wall with another wall
-  static Offset getWallAlignmentOffset((Offset, Offset) sourceWall, (Offset, Offset) targetWall) {
+  static Offset getWallAlignmentOffset(
+      (Offset, Offset) sourceWall, (Offset, Offset) targetWall) {
     if (!areWallsParallel(sourceWall, targetWall)) return Offset.zero;
 
     final sourceVector = sourceWall.$2 - sourceWall.$1;

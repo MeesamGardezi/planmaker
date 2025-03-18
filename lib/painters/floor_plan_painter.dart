@@ -47,28 +47,28 @@ class FloorPlanPainter extends CustomPainter {
     if (showGrid) {
       _drawGrid(canvas, size);
     }
-    
+
     // First draw room backgrounds for all rooms
     for (var room in rooms) {
       _drawRoomBackground(canvas, room);
     }
-    
+
     // Draw walls
     for (var room in rooms) {
       _drawRoomWalls(canvas, room);
     }
-    
+
     // Draw elements
     for (var room in rooms) {
       _drawRoomElements(canvas, room);
     }
-    
+
     // Draw snap points and visual feedback when dragging
     if (isDragging) {
       _drawSnapPoints(canvas);
       _drawDragFeedback(canvas);
     }
-    
+
     // Draw selected object highlights
     if (selectedRoom != null) {
       _drawSelectedRoomHighlight(canvas, selectedRoom!);
@@ -92,7 +92,7 @@ class FloorPlanPainter extends CustomPainter {
         gridPaint.color = Colors.grey.withOpacity(0.2);
         gridPaint.strokeWidth = 1.0;
       }
-      
+
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, size.height),
@@ -110,7 +110,7 @@ class FloorPlanPainter extends CustomPainter {
         gridPaint.color = Colors.grey.withOpacity(0.2);
         gridPaint.strokeWidth = 1.0;
       }
-      
+
       canvas.drawLine(
         Offset(0, y),
         Offset(size.width, y),
@@ -118,23 +118,25 @@ class FloorPlanPainter extends CustomPainter {
       );
     }
   }
-  
+
   void _drawRoomBackground(Canvas canvas, Room room) {
     // Use a rectangle for the room background
     final rect = room.rect;
-    
+
     // Fill with room color
     final fillPaint = Paint()
-      ..color = room.selected ? room.color.withOpacity(0.85) : room.color.withOpacity(0.7);
-    
+      ..color = room.selected
+          ? room.color.withOpacity(0.85)
+          : room.color.withOpacity(0.7);
+
     canvas.drawRect(rect, fillPaint);
-    
+
     // Draw room name if showing measurements
     if (showMeasurements) {
       _drawRoomName(canvas, room);
     }
   }
-  
+
   void _drawRoomName(Canvas canvas, Room room) {
     final textSpan = TextSpan(
       text: room.name,
@@ -151,7 +153,7 @@ class FloorPlanPainter extends CustomPainter {
     );
 
     textPainter.layout();
-    
+
     // Position text in center of room
     textPainter.paint(
       canvas,
@@ -161,39 +163,18 @@ class FloorPlanPainter extends CustomPainter {
       ),
     );
   }
-  
-  void _drawRoomWalls(Canvas canvas, Room room) {
-    final wallSegments = room.getWallSegments();
-    final isSelected = room == selectedRoom;
-    
-    final wallPaint = Paint()
-      ..color = isSelected ? Colors.blue.shade800 : Colors.black87
-      ..strokeWidth = wallThickness
-      ..strokeCap = StrokeCap.butt;
-    
-    for (int i = 0; i < wallSegments.length; i++) {
-      final wall = wallSegments[i];
-      
-      // Draw wall line
-      canvas.drawLine(wall.$1, wall.$2, wallPaint);
-      
-      // Draw wall measurement if enabled
-      if (showMeasurements) {
-        _drawWallMeasurement(canvas, wall.$1, wall.$2);
-      }
-    }
-  }
-  
+
   void _drawWallMeasurement(Canvas canvas, Offset start, Offset end) {
     // Calculate wall length in pixels
     final length = (end - start).distance;
-    
+
     // Convert directly to the current unit system (e.g., feet)
     final realLength = length * gridRealSize / gridSize;
-    
+
     // Format using the improved util method that doesn't double-convert
-    final formattedLength = MeasurementUtils.formatLengthInUnit(realLength, unit);
-    
+    final formattedLength =
+        MeasurementUtils.formatLengthInUnit(realLength, unit);
+
     // Create text
     final textSpan = TextSpan(
       text: formattedLength,
@@ -210,11 +191,11 @@ class FloorPlanPainter extends CustomPainter {
     );
 
     textPainter.layout();
-    
+
     // Position at midpoint of wall
     final midX = (start.dx + end.dx) / 2;
     final midY = (start.dy + end.dy) / 2;
-    
+
     textPainter.paint(
       canvas,
       Offset(
@@ -223,34 +204,34 @@ class FloorPlanPainter extends CustomPainter {
       ),
     );
   }
-  
+
   void _drawRoomElements(Canvas canvas, Room room) {
     for (var element in room.elements) {
       // Save canvas state to handle rotation
       canvas.save();
-      
+
       // Translate to element position and apply rotation
       canvas.translate(element.position.dx, element.position.dy);
       canvas.rotate(element.rotation);
-      
+
       // Determine element style
       final paint = Paint()
         ..color = element.isSelected ? Colors.blue.shade700 : Colors.black87
         ..strokeWidth = element.isSelected ? 2.0 : 1.5
         ..style = PaintingStyle.stroke;
-      
+
       // Draw appropriate element type
       if (element.type == ElementType.door) {
         _drawDoor(canvas, element, paint);
       } else if (element.type == ElementType.window) {
         _drawWindow(canvas, element, paint);
       }
-      
+
       // Restore canvas state
       canvas.restore();
     }
   }
-  
+
   void _drawDoor(Canvas canvas, ArchitecturalElement element, Paint paint) {
     // Draw door opening (two vertical lines)
     canvas.drawLine(
@@ -263,7 +244,7 @@ class FloorPlanPainter extends CustomPainter {
       Offset(element.width / 2, element.height / 2),
       paint,
     );
-    
+
     // Draw door arc
     final arcRect = Rect.fromCenter(
       center: Offset(-element.width / 2, 0),
@@ -271,14 +252,14 @@ class FloorPlanPainter extends CustomPainter {
       height: element.width,
     );
     canvas.drawArc(arcRect, -math.pi / 2, math.pi / 2, false, paint);
-    
+
     // Draw door connecting line
     canvas.drawLine(
       Offset(-element.width / 2, 0),
       Offset(element.width / 2, 0),
       paint,
     );
-    
+
     // Draw label if selected
     if (element.isSelected && element.name != null) {
       final textSpan = TextSpan(
@@ -302,7 +283,7 @@ class FloorPlanPainter extends CustomPainter {
       );
     }
   }
-  
+
   void _drawWindow(Canvas canvas, ArchitecturalElement element, Paint paint) {
     // Draw window frame
     canvas.drawRect(
@@ -313,14 +294,14 @@ class FloorPlanPainter extends CustomPainter {
       ),
       paint,
     );
-    
+
     // Draw window mullions (cross bars)
     canvas.drawLine(
       Offset(-element.width / 2, 0),
       Offset(element.width / 2, 0),
       paint,
     );
-    
+
     // Draw label if selected
     if (element.isSelected && element.name != null) {
       final textSpan = TextSpan(
@@ -344,98 +325,92 @@ class FloorPlanPainter extends CustomPainter {
       );
     }
   }
-  
+
   // Draw snap points and potential connection points
   void _drawSnapPoints(Canvas canvas) {
     if (!isDragging) return;
-    
+
     final snapPointPaint = Paint()
       ..color = Colors.orange.withOpacity(0.6)
       ..style = PaintingStyle.fill;
-    
+
     // Draw wall midpoints and corners for all rooms
     for (var room in rooms) {
       // Skip the currently dragged room
       if (room == selectedRoom && selectedRoom!.isDragging) continue;
-      
+
       // Draw potential snap points
       final wallSegments = room.getWallSegments();
-      
+
       // Draw walls with faint highlight to indicate snap targets
       final wallHighlightPaint = Paint()
         ..color = Colors.orange.withOpacity(0.2)
         ..strokeWidth = wallThickness * 1.2
         ..strokeCap = StrokeCap.butt;
-      
+
       for (int i = 0; i < wallSegments.length; i++) {
         final wall = wallSegments[i];
         canvas.drawLine(wall.$1, wall.$2, wallHighlightPaint);
-        
+
         // Draw midpoint
         final midpoint = Offset(
-          (wall.$1.dx + wall.$2.dx) / 2,
-          (wall.$1.dy + wall.$2.dy) / 2
-        );
-        
+            (wall.$1.dx + wall.$2.dx) / 2, (wall.$1.dy + wall.$2.dy) / 2);
+
         canvas.drawCircle(midpoint, 3.0, snapPointPaint);
       }
-      
+
       // Draw corners
       final corners = room.getCorners();
       for (var corner in corners) {
         canvas.drawCircle(corner, 5.0, snapPointPaint);
       }
     }
-    
+
     // Draw specific feedback for current snap type
-    if (currentSnapType == SnapType.wall && 
-        selectedRoom != null && 
-        targetSnapRoom != null && 
-        sourceWallIndex != null && 
+    if (currentSnapType == SnapType.wall &&
+        selectedRoom != null &&
+        targetSnapRoom != null &&
+        sourceWallIndex != null &&
         targetWallIndex != null) {
       _drawWallSnapHighlight(canvas);
     }
   }
-  
+
   // Draw visual feedback for wall snap
   void _drawWallSnapHighlight(Canvas canvas) {
-    if (selectedRoom == null || 
-        targetSnapRoom == null || 
-        sourceWallIndex == null || 
+    if (selectedRoom == null ||
+        targetSnapRoom == null ||
+        sourceWallIndex == null ||
         targetWallIndex == null) return;
-    
+
     final sourceWalls = selectedRoom!.getWallSegments();
     final targetWalls = targetSnapRoom!.getWallSegments();
-    
-    if (sourceWallIndex! >= sourceWalls.length || 
+
+    if (sourceWallIndex! >= sourceWalls.length ||
         targetWallIndex! >= targetWalls.length) return;
-    
+
     final sourceWall = sourceWalls[sourceWallIndex!];
     final targetWall = targetWalls[targetWallIndex!];
-    
+
     // Draw highlighted walls
     final highlightPaint = Paint()
       ..color = Colors.green
       ..strokeWidth = wallThickness * 1.5
       ..strokeCap = StrokeCap.butt;
-    
+
     canvas.drawLine(sourceWall.$1, sourceWall.$2, highlightPaint);
     canvas.drawLine(targetWall.$1, targetWall.$2, highlightPaint);
-    
+
     // Calculate midpoints
-    final sourceMid = Offset(
-      (sourceWall.$1.dx + sourceWall.$2.dx) / 2,
-      (sourceWall.$1.dy + sourceWall.$2.dy) / 2
-    );
-    
-    final targetMid = Offset(
-      (targetWall.$1.dx + targetWall.$2.dx) / 2,
-      (targetWall.$1.dy + targetWall.$2.dy) / 2
-    );
-    
+    final sourceMid = Offset((sourceWall.$1.dx + sourceWall.$2.dx) / 2,
+        (sourceWall.$1.dy + sourceWall.$2.dy) / 2);
+
+    final targetMid = Offset((targetWall.$1.dx + targetWall.$2.dx) / 2,
+        (targetWall.$1.dy + targetWall.$2.dy) / 2);
+
     // Draw connecting line
     _drawSnapArrow(canvas, sourceMid, targetMid);
-    
+
     // Draw alignment text
     final textSpan = TextSpan(
       text: "Wall Alignment",
@@ -453,7 +428,7 @@ class FloorPlanPainter extends CustomPainter {
     );
 
     textPainter.layout();
-    
+
     textPainter.paint(
       canvas,
       Offset(
@@ -462,7 +437,7 @@ class FloorPlanPainter extends CustomPainter {
       ),
     );
   }
-  
+
   // Draw visual feedback for dragging operations
   void _drawDragFeedback(Canvas canvas) {
     if (selectedRoom != null && selectedRoom!.isDragging) {
@@ -473,12 +448,13 @@ class FloorPlanPainter extends CustomPainter {
       _drawDraggingElementGuidelines(canvas, selectedElement!);
     }
   }
-  
+
   // Draw snap type indicator
   void _drawSnapTypeIndicator(Canvas canvas, Room room) {
     if (currentSnapType == SnapType.none) {
       // Draw current position
-      final posText = "(${room.position.dx.toStringAsFixed(1)}, ${room.position.dy.toStringAsFixed(1)})";
+      final posText =
+          "(${room.position.dx.toStringAsFixed(1)}, ${room.position.dy.toStringAsFixed(1)})";
       final textSpan = TextSpan(
         text: posText,
         style: const TextStyle(
@@ -487,12 +463,12 @@ class FloorPlanPainter extends CustomPainter {
           backgroundColor: Colors.white70,
         ),
       );
-      
+
       final textPainter = TextPainter(
         text: textSpan,
         textDirection: TextDirection.ltr,
       );
-      
+
       textPainter.layout();
       textPainter.paint(
         canvas,
@@ -503,11 +479,11 @@ class FloorPlanPainter extends CustomPainter {
       );
       return;
     }
-    
+
     // Determine color and text based on snap type
     Color indicatorColor;
     String indicatorText;
-    
+
     switch (currentSnapType) {
       case SnapType.corner:
         indicatorColor = Colors.blue;
@@ -521,7 +497,7 @@ class FloorPlanPainter extends CustomPainter {
         indicatorColor = Colors.grey;
         indicatorText = "Free Move";
     }
-    
+
     // Draw snap indicator text
     final textSpan = TextSpan(
       text: indicatorText,
@@ -532,12 +508,12 @@ class FloorPlanPainter extends CustomPainter {
         backgroundColor: Colors.white.withOpacity(0.7),
       ),
     );
-    
+
     final textPainter = TextPainter(
       text: textSpan,
       textDirection: TextDirection.ltr,
     );
-    
+
     textPainter.layout();
     textPainter.paint(
       canvas,
@@ -546,15 +522,15 @@ class FloorPlanPainter extends CustomPainter {
         room.position.dy - room.height / 2 - 30,
       ),
     );
-    
+
     // Draw snap details
-    if (currentSnapType == SnapType.wall && 
-        targetSnapRoom != null && 
-        sourceWallIndex != null && 
+    if (currentSnapType == SnapType.wall &&
+        targetSnapRoom != null &&
+        sourceWallIndex != null &&
         targetWallIndex != null) {
-      
       final detailsSpan = TextSpan(
-        text: "${selectedRoom!.getWallDescriptions()[sourceWallIndex!]} ↔ ${targetSnapRoom!.getWallDescriptions()[targetWallIndex!]}",
+        text:
+            "${selectedRoom!.getWallDescriptions()[sourceWallIndex!]} ↔ ${targetSnapRoom!.getWallDescriptions()[targetWallIndex!]}",
         style: TextStyle(
           color: indicatorColor,
           fontSize: 12,
@@ -562,12 +538,12 @@ class FloorPlanPainter extends CustomPainter {
           backgroundColor: Colors.white.withOpacity(0.7),
         ),
       );
-      
+
       final detailsPainter = TextPainter(
         text: detailsSpan,
         textDirection: TextDirection.ltr,
       );
-      
+
       detailsPainter.layout();
       detailsPainter.paint(
         canvas,
@@ -578,13 +554,15 @@ class FloorPlanPainter extends CustomPainter {
       );
     }
   }
-  
+
   // Draw guidelines for element dragging
-  void _drawDraggingElementGuidelines(Canvas canvas, ArchitecturalElement element) {
+  void _drawDraggingElementGuidelines(
+      Canvas canvas, ArchitecturalElement element) {
     if (currentSnapType == SnapType.none) {
       // Show current position when not snapping
-      final posText = "(${element.position.dx.toStringAsFixed(1)}, ${element.position.dy.toStringAsFixed(1)})";
-      
+      final posText =
+          "(${element.position.dx.toStringAsFixed(1)}, ${element.position.dy.toStringAsFixed(1)})";
+
       final textSpan = TextSpan(
         text: posText,
         style: const TextStyle(
@@ -593,12 +571,12 @@ class FloorPlanPainter extends CustomPainter {
           backgroundColor: Colors.white70,
         ),
       );
-      
+
       final textPainter = TextPainter(
         text: textSpan,
         textDirection: TextDirection.ltr,
       );
-      
+
       textPainter.layout();
       textPainter.paint(
         canvas,
@@ -609,36 +587,37 @@ class FloorPlanPainter extends CustomPainter {
       );
       return;
     }
-    
+
     // Find closest wall or corner for visual feedback
-    final wallResult = Room.findClosestWallPoint(element.position, rooms, snapDistance);
-    
+    final wallResult =
+        Room.findClosestWallPoint(element.position, rooms, snapDistance);
+
     if (wallResult != null && currentSnapType == SnapType.wall) {
       final snapPoint = wallResult.$1;
       final wall = wallResult.$3;
-      
+
       // Highlight the closest point on wall
       final snapHighlightPaint = Paint()
         ..color = Colors.green
         ..strokeWidth = 3.0
         ..style = PaintingStyle.stroke;
-      
+
       canvas.drawCircle(snapPoint, 6.0, snapHighlightPaint);
-      
+
       // Draw line from element to snap point
       _drawSnapArrow(canvas, element.position, snapPoint);
-      
+
       // Draw wall highlight
       final wallHighlightPaint = Paint()
         ..color = Colors.green.withOpacity(0.5)
         ..strokeWidth = wallThickness * 1.2
         ..strokeCap = StrokeCap.butt;
-      
+
       canvas.drawLine(wall.$1, wall.$2, wallHighlightPaint);
-      
+
       // Draw element preview at wall
       _drawElementWallPreview(canvas, element, snapPoint, wall);
-      
+
       // Draw distance text
       final distance = wallResult.$2;
       final snapText = "Wall Snap: ${distance.toStringAsFixed(1)}px";
@@ -651,12 +630,12 @@ class FloorPlanPainter extends CustomPainter {
           backgroundColor: Colors.white70,
         ),
       );
-      
+
       final snapTextPainter = TextPainter(
         text: snapSpan,
         textDirection: TextDirection.ltr,
       );
-      
+
       snapTextPainter.layout();
       snapTextPainter.paint(
         canvas,
@@ -665,30 +644,30 @@ class FloorPlanPainter extends CustomPainter {
           snapPoint.dy + 15,
         ),
       );
-    }
-    else if (currentSnapType == SnapType.corner) {
+    } else if (currentSnapType == SnapType.corner) {
       // Try to find closest corner
-      final cornerResult = Room.findClosestCorner(element.position, rooms, snapDistance);
-      
+      final cornerResult =
+          Room.findClosestCorner(element.position, rooms, snapDistance);
+
       if (cornerResult != null) {
         final cornerPos = cornerResult.$1;
         final room = cornerResult.$4;
         final cornerIndex = cornerResult.$3;
-        
+
         // Highlight the corner
         final snapHighlightPaint = Paint()
           ..color = Colors.blue
           ..strokeWidth = 3.0
           ..style = PaintingStyle.stroke;
-        
+
         canvas.drawCircle(cornerPos, 7.0, snapHighlightPaint);
-        
+
         // Draw arrow from element to corner
         _drawSnapArrow(canvas, element.position, cornerPos);
-        
+
         // Draw element preview at corner
         _drawElementCornerPreview(canvas, element, cornerPos, cornerIndex);
-        
+
         // Draw corner name and distance
         final distance = cornerResult.$2;
         final cornerName = room.getCornerDescriptions()[cornerIndex];
@@ -702,12 +681,12 @@ class FloorPlanPainter extends CustomPainter {
             backgroundColor: Colors.white70,
           ),
         );
-        
+
         final snapTextPainter = TextPainter(
           text: snapSpan,
           textDirection: TextDirection.ltr,
         );
-        
+
         snapTextPainter.layout();
         snapTextPainter.paint(
           canvas,
@@ -719,36 +698,34 @@ class FloorPlanPainter extends CustomPainter {
       }
     }
   }
-  
+
   // Draw preview of element at wall
-  void _drawElementWallPreview(Canvas canvas, ArchitecturalElement element, 
-                              Offset snapPoint, (Offset, Offset) wall) {
+  void _drawElementWallPreview(Canvas canvas, ArchitecturalElement element,
+      Offset snapPoint, (Offset, Offset) wall) {
     canvas.save();
-    
+
     // Calculate wall angle
     final wallVector = wall.$2 - wall.$1;
     final wallAngle = math.atan2(wallVector.dy, wallVector.dx);
-    
+
     // Calculate rotation perpendicular to wall
     final rotation = wallAngle + math.pi / 2;
-    
+
     // Calculate adjusted position (offset from wall)
     final perpOffset = element.height / 2;
-    final adjustedPos = Offset(
-      snapPoint.dx + math.cos(rotation) * perpOffset,
-      snapPoint.dy + math.sin(rotation) * perpOffset
-    );
-    
+    final adjustedPos = Offset(snapPoint.dx + math.cos(rotation) * perpOffset,
+        snapPoint.dy + math.sin(rotation) * perpOffset);
+
     // Translate to position and apply rotation
     canvas.translate(adjustedPos.dx, adjustedPos.dy);
     canvas.rotate(rotation);
-    
+
     // Draw element preview
     final previewPaint = Paint()
       ..color = Colors.green.withOpacity(0.7)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
-    
+
     if (element.type == ElementType.door) {
       // Draw door frame
       canvas.drawRect(
@@ -759,7 +736,7 @@ class FloorPlanPainter extends CustomPainter {
         ),
         previewPaint,
       );
-      
+
       // Door arc hint
       final arcRect = Rect.fromCenter(
         center: Offset(-element.width / 4, 0),
@@ -777,7 +754,7 @@ class FloorPlanPainter extends CustomPainter {
         ),
         previewPaint,
       );
-      
+
       // Add cross bar
       canvas.drawLine(
         Offset(-element.width / 2, 0),
@@ -785,16 +762,16 @@ class FloorPlanPainter extends CustomPainter {
         previewPaint,
       );
     }
-    
+
     // Restore canvas state
     canvas.restore();
   }
-  
+
   // Draw preview of element at corner
-  void _drawElementCornerPreview(Canvas canvas, ArchitecturalElement element, 
-                              Offset cornerPos, int cornerIndex) {
+  void _drawElementCornerPreview(Canvas canvas, ArchitecturalElement element,
+      Offset cornerPos, int cornerIndex) {
     canvas.save();
-    
+
     // Calculate angle based on corner
     double angle;
     switch (cornerIndex) {
@@ -813,24 +790,22 @@ class FloorPlanPainter extends CustomPainter {
       default:
         angle = 0;
     }
-    
+
     // Calculate adjusted position (offset from corner)
     final offsetDistance = element.width / 4;
-    final adjustedPos = Offset(
-      cornerPos.dx + math.cos(angle) * offsetDistance,
-      cornerPos.dy + math.sin(angle) * offsetDistance
-    );
-    
+    final adjustedPos = Offset(cornerPos.dx + math.cos(angle) * offsetDistance,
+        cornerPos.dy + math.sin(angle) * offsetDistance);
+
     // Translate to position and apply rotation
     canvas.translate(adjustedPos.dx, adjustedPos.dy);
     canvas.rotate(angle);
-    
+
     // Draw element preview
     final previewPaint = Paint()
       ..color = Colors.blue.withOpacity(0.7)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
-    
+
     if (element.type == ElementType.door) {
       // Draw door frame
       canvas.drawRect(
@@ -841,7 +816,7 @@ class FloorPlanPainter extends CustomPainter {
         ),
         previewPaint,
       );
-      
+
       // Door arc hint
       final arcRect = Rect.fromCenter(
         center: Offset(-element.width / 4, 0),
@@ -859,7 +834,7 @@ class FloorPlanPainter extends CustomPainter {
         ),
         previewPaint,
       );
-      
+
       // Add cross bar
       canvas.drawLine(
         Offset(-element.width / 2, 0),
@@ -867,80 +842,82 @@ class FloorPlanPainter extends CustomPainter {
         previewPaint,
       );
     }
-    
+
     // Restore canvas state
     canvas.restore();
   }
-  
+
   // Draw an arrow between two points
   void _drawSnapArrow(Canvas canvas, Offset from, Offset to) {
     // Calculate distance and direction
     final delta = to - from;
     final distance = delta.distance;
-    
+
     if (distance < 1.0) return; // Skip if positions are too close
-    
+
     final direction = delta / distance;
-    
+
     // Draw arrow line
     final arrowPaint = Paint()
       ..color = Colors.green
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
-    
+
     canvas.drawLine(from, to, arrowPaint);
-    
+
     // Draw arrow head
     final arrowHeadSize = 8.0;
     final arrowHeadPaint = Paint()
       ..color = Colors.green
       ..style = PaintingStyle.fill;
-    
+
     // Calculate arrow head points
     final perpDirection = Offset(-direction.dy, direction.dx);
-    
-    final arrowPoint1 = to - direction * arrowHeadSize + perpDirection * arrowHeadSize / 2;
-    final arrowPoint2 = to - direction * arrowHeadSize - perpDirection * arrowHeadSize / 2;
-    
+
+    final arrowPoint1 =
+        to - direction * arrowHeadSize + perpDirection * arrowHeadSize / 2;
+    final arrowPoint2 =
+        to - direction * arrowHeadSize - perpDirection * arrowHeadSize / 2;
+
     final path = Path()
       ..moveTo(to.dx, to.dy)
       ..lineTo(arrowPoint1.dx, arrowPoint1.dy)
       ..lineTo(arrowPoint2.dx, arrowPoint2.dy)
       ..close();
-    
+
     canvas.drawPath(path, arrowHeadPaint);
   }
-  
+
   // Draw highlight for selected room
   void _drawSelectedRoomHighlight(Canvas canvas, Room room) {
     // Draw selection outline
     final selectionRect = room.selectionRect;
-    
+
     final selectionPaint = Paint()
       ..color = Colors.blue
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
-    
+
     canvas.drawRect(selectionRect, selectionPaint);
-    
+
     // Draw selection handles at corners
     final cornerPaint = Paint()
       ..color = Colors.blue
       ..style = PaintingStyle.fill;
-    
+
     for (var corner in room.getCorners()) {
       canvas.drawCircle(corner, 6.0, cornerPaint);
     }
-    
+
     // Draw dimensions if room is selected
     if (showMeasurements) {
       final width = room.width * gridRealSize / gridSize;
       final height = room.height * gridRealSize / gridSize;
-      
+
       // Use the direct formatting without double conversion
       final widthText = MeasurementUtils.formatLengthInUnit(width, unit);
       final heightText = MeasurementUtils.formatLengthInUnit(height, unit);
-      
+
       // Draw width dimension text
       final widthTextSpan = TextSpan(
         text: widthText,
@@ -965,7 +942,7 @@ class FloorPlanPainter extends CustomPainter {
           room.position.dy - room.height / 2 - 20,
         ),
       );
-      
+
       // Draw height dimension text
       final heightTextSpan = TextSpan(
         text: heightText,
@@ -992,42 +969,135 @@ class FloorPlanPainter extends CustomPainter {
       );
     }
   }
-  
+
   // Draw highlight for selected element
-  void _drawSelectedElementHighlight(Canvas canvas, ArchitecturalElement element) {
+  void _drawSelectedElementHighlight(
+      Canvas canvas, ArchitecturalElement element) {
     canvas.save();
-    
+
     // Translate to element position and apply rotation
     canvas.translate(element.position.dx, element.position.dy);
     canvas.rotate(element.rotation);
-    
+
     // Draw selection outline
     final rect = Rect.fromCenter(
       center: Offset.zero,
       width: element.width + 10,
       height: element.height + 10,
     );
-    
+
     final selectionPaint = Paint()
       ..color = Colors.blue
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
-    
+
     canvas.drawRect(rect, selectionPaint);
-    
+
     // Draw corner handles
     final handlePaint = Paint()
       ..color = Colors.blue
       ..style = PaintingStyle.fill;
-    
+
     final halfWidth = element.width / 2 + 5;
     final halfHeight = element.height / 2 + 5;
-    
+
     canvas.drawCircle(Offset(-halfWidth, -halfHeight), 4, handlePaint);
     canvas.drawCircle(Offset(halfWidth, -halfHeight), 4, handlePaint);
     canvas.drawCircle(Offset(halfWidth, halfHeight), 4, handlePaint);
     canvas.drawCircle(Offset(-halfWidth, halfHeight), 4, handlePaint);
-    
+
+    canvas.restore();
+  }
+
+  void _drawRoomWalls(Canvas canvas, Room room) {
+    final wallSegments = room.getWallSegments();
+    final wallNames = room.getWallDescriptions();
+    final isSelected = room == selectedRoom;
+
+    final wallPaint = Paint()
+      ..color = isSelected ? Colors.blue.shade800 : Colors.black87
+      ..strokeWidth = wallThickness
+      ..strokeCap = StrokeCap.butt;
+
+    for (int i = 0; i < wallSegments.length; i++) {
+      final wall = wallSegments[i];
+
+      // Draw wall line
+      canvas.drawLine(wall.$1, wall.$2, wallPaint);
+
+      // Draw wall measurement if enabled
+      if (showMeasurements) {
+        _drawWallMeasurement(canvas, wall.$1, wall.$2);
+      }
+
+      // Draw wall name label when room is selected or showMeasurements is true
+      if (isSelected || showMeasurements) {
+        _drawWallNameLabel(canvas, wall, wallNames[i], isSelected);
+      }
+    }
+  }
+
+  void _drawWallNameLabel(
+      Canvas canvas, (Offset, Offset) wall, String wallName, bool isSelected) {
+    // Calculate midpoint of the wall
+    final midX = (wall.$1.dx + wall.$2.dx) / 2;
+    final midY = (wall.$1.dy + wall.$2.dy) / 2;
+
+    // Calculate wall angle to determine text rotation
+    final wallVector = wall.$2 - wall.$1;
+    final wallAngle = math.atan2(wallVector.dy, wallVector.dx);
+
+    // Determine if wall is more horizontal or vertical
+    final isHorizontal = wallVector.dx.abs() > wallVector.dy.abs();
+
+    // Create text span for wall name
+    final textSpan = TextSpan(
+      text: wallName,
+      style: TextStyle(
+        color: isSelected ? Colors.blue.shade800 : Colors.black87,
+        fontSize: 10,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        backgroundColor: Colors.white.withOpacity(0.7),
+      ),
+    );
+
+    final textPainter = TextPainter(
+      text: textSpan,
+      textDirection: TextDirection.ltr,
+    );
+
+    textPainter.layout();
+
+    // Save canvas state for rotation
+    canvas.save();
+
+    // Position and rotate text
+    if (isHorizontal) {
+      // Place text above horizontal walls
+      canvas.translate(midX, midY - 18);
+
+      // Handle text orientation (flip for right-to-left walls)
+      if (wall.$1.dx > wall.$2.dx) {
+        canvas.rotate(math.pi); // Rotate 180 degrees
+      }
+    } else {
+      // Place text beside vertical walls
+      canvas.translate(midX + 18, midY);
+      canvas.rotate(math.pi / 2); // Rotate 90 degrees
+
+      // Handle text orientation (flip for bottom-to-top walls)
+      if (wall.$1.dy > wall.$2.dy) {
+        canvas.rotate(math.pi); // Rotate 180 degrees
+      }
+    }
+
+    // Draw text
+    textPainter.paint(
+      canvas,
+      Offset(-textPainter.width / 2, -textPainter.height / 2),
+    );
+
+    // Restore canvas
     canvas.restore();
   }
 
