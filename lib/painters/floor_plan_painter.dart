@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import '../models/measurements.dart';
 import '../models/room.dart';
 import '../models/element.dart';
 import '../models/enums.dart';
@@ -22,6 +23,11 @@ class FloorPlanPainter extends CustomPainter {
   final Room? targetSnapRoom;
   final int? sourceWallIndex;
   final int? targetWallIndex;
+  final List<Measurement> measurements;
+  final Measurement? activeMeasurement;
+  final bool isDrawingLine;
+  final Offset? lineStart;
+  final Offset? lineEnd;
 
   FloorPlanPainter({
     required this.rooms,
@@ -40,6 +46,11 @@ class FloorPlanPainter extends CustomPainter {
     this.targetSnapRoom,
     this.sourceWallIndex,
     this.targetWallIndex,
+    this.measurements = const [],
+    this.activeMeasurement,
+    this.isDrawingLine = false,
+    this.lineStart,
+    this.lineEnd,
   });
 
   @override
@@ -62,6 +73,12 @@ class FloorPlanPainter extends CustomPainter {
     for (var room in rooms) {
       _drawRoomElements(canvas, room);
     }
+
+    // Draw measurements
+    _drawMeasurements(canvas);
+
+    // Draw temporary line during drawing
+    _drawTemporaryLine(canvas);
 
     // Draw snap points and visual feedback when dragging
     if (isDragging) {
@@ -115,6 +132,47 @@ class FloorPlanPainter extends CustomPainter {
         Offset(0, y),
         Offset(size.width, y),
         gridPaint,
+      );
+    }
+  }
+
+  void _drawLine(Canvas canvas, ArchitecturalElement element, Paint paint) {
+    if (element.startPoint != null && element.endPoint != null) {
+      // Draw the line from start to end
+      canvas.drawLine(
+        Offset(-element.width / 2, 0),
+        Offset(element.width / 2, 0),
+        paint,
+      );
+
+      // Draw label if selected
+      if (element.isSelected && element.name != null) {
+        final textSpan = TextSpan(
+          text: element.name!,
+          style: const TextStyle(
+            color: Colors.blue,
+            fontSize: 10,
+            backgroundColor: Colors.white70,
+          ),
+        );
+
+        final textPainter = TextPainter(
+          text: textSpan,
+          textDirection: TextDirection.ltr,
+        );
+
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          Offset(-textPainter.width / 2, 10),
+        );
+      }
+    } else {
+      // Fallback - draw a simple line based on element width
+      canvas.drawLine(
+        Offset(-element.width / 2, 0),
+        Offset(element.width / 2, 0),
+        paint,
       );
     }
   }
@@ -225,10 +283,108 @@ class FloorPlanPainter extends CustomPainter {
         _drawDoor(canvas, element, paint);
       } else if (element.type == ElementType.window) {
         _drawWindow(canvas, element, paint);
+      } else if (element.type == ElementType.line) {
+        _drawLine(canvas, element, paint);
       }
 
       // Restore canvas state
       canvas.restore();
+    }
+  }
+
+  void _drawTemporaryLine(Canvas canvas) {
+    if (isDrawingLine && lineStart != null && lineEnd != null) {
+      final linePaint = Paint()
+        ..color = Colors.blue
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawLine(lineStart!, lineEnd!, linePaint);
+    }
+  }
+
+  void _drawMeasurements(Canvas canvas) {
+    final measurementPaint = Paint()
+      ..color = Colors.purple
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    // Draw saved measurements
+    for (var measurement in measurements) {
+      // Draw the measurement line
+      canvas.drawLine(measurement.start, measurement.end, measurementPaint);
+
+      // Draw the length text
+      final realLength = measurement.measuredLength * gridRealSize / gridSize;
+      final formattedLength =
+          MeasurementUtils.formatLengthInUnit(realLength, unit);
+
+      final textSpan = TextSpan(
+        text: formattedLength,
+        style: const TextStyle(
+          color: Colors.purple,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          backgroundColor: Colors.white70,
+        ),
+      );
+
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      );
+
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(
+          measurement.midpoint.dx - textPainter.width / 2,
+          measurement.midpoint.dy - textPainter.height / 2,
+        ),
+      );
+    }
+
+    // Draw active measurement if any
+    if (activeMeasurement != null) {
+      // Draw the measurement line
+      canvas.drawLine(
+        activeMeasurement!.start,
+        activeMeasurement!.end,
+        measurementPaint..color = Colors.purple.withOpacity(0.7),
+      );
+
+      // Draw the length text if the line has meaningful length
+      if ((activeMeasurement!.end - activeMeasurement!.start).distance > 5) {
+        final realLength =
+            activeMeasurement!.measuredLength * gridRealSize / gridSize;
+        final formattedLength =
+            MeasurementUtils.formatLengthInUnit(realLength, unit);
+
+        final textSpan = TextSpan(
+          text: formattedLength,
+          style: const TextStyle(
+            color: Colors.purple,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            backgroundColor: Colors.white70,
+          ),
+        );
+
+        final textPainter = TextPainter(
+          text: textSpan,
+          textDirection: TextDirection.ltr,
+        );
+
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          Offset(
+            activeMeasurement!.midpoint.dx - textPainter.width / 2,
+            activeMeasurement!.midpoint.dy - textPainter.height / 2,
+          ),
+        );
+      }
     }
   }
 

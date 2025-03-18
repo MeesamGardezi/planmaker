@@ -1,6 +1,7 @@
 enum ElementType {
   door('Door'),
-  window('Window');
+  window('Window'),
+  line('Line');
 
   final String label;
   const ElementType(this.label);
@@ -21,8 +22,9 @@ enum EditorMode {
   room('Room'),
   door('Door'),
   window('Window'),
+  line('Line'),
+  measure('Measure'),
   delete('Delete');
-
   final String label;
   const EditorMode(this.label);
 }

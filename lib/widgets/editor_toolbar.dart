@@ -54,9 +54,9 @@ class EditorToolbar extends StatelessWidget {
               color: Colors.grey[800],
             ),
           ),
-          
+
           const SizedBox(width: 16),
-          
+
           // Project name
           InkWell(
             onTap: onRenameProject,
@@ -74,23 +74,25 @@ class EditorToolbar extends StatelessWidget {
               ],
             ),
           ),
-          
+
           const Spacer(),
-          
+
           // Tools
           _buildToolButton(context, EditorMode.select, Icons.pan_tool),
           _buildToolButton(context, EditorMode.room, Icons.dashboard),
           _buildToolButton(context, EditorMode.door, Icons.door_back_door),
           _buildToolButton(context, EditorMode.window, Icons.window),
+          _buildToolButton(context, EditorMode.line, Icons.timeline),
+          _buildToolButton(context, EditorMode.measure, Icons.straighten),
           _buildToolButton(context, EditorMode.delete, Icons.delete),
-          
+
           const SizedBox(width: 16),
-          
+
           // Room tabs
           ..._buildRoomTabs(),
-          
+
           const SizedBox(width: 8),
-          
+
           // Add Room button
           ElevatedButton.icon(
             onPressed: onAddRoom,
@@ -101,9 +103,9 @@ class EditorToolbar extends StatelessWidget {
               foregroundColor: Colors.white,
             ),
           ),
-          
+
           const SizedBox(width: 8),
-          
+
           // Menu
           IconButton(
             icon: const Icon(Icons.more_vert),
@@ -111,11 +113,7 @@ class EditorToolbar extends StatelessWidget {
               showMenu(
                 context: context,
                 position: RelativeRect.fromLTRB(
-                  MediaQuery.of(context).size.width, 
-                  60, 
-                  0, 
-                  0
-                ),
+                    MediaQuery.of(context).size.width, 60, 0, 0),
                 items: [
                   const PopupMenuItem(
                     value: 'export_png',
@@ -141,13 +139,24 @@ class EditorToolbar extends StatelessWidget {
       ),
     );
   }
-  
-  Widget _buildToolButton(BuildContext context, EditorMode toolMode, IconData icon) {
+
+  Widget _buildToolButton(
+      BuildContext context, EditorMode toolMode, IconData icon) {
     final isSelected = mode == toolMode;
+
+    // Override icon for specific modes
+    IconData displayIcon = icon;
+    if (toolMode == EditorMode.line) {
+      displayIcon = Icons.timeline;
+    } else if (toolMode == EditorMode.measure) {
+      displayIcon = Icons.straighten;
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
       child: Material(
-        color: isSelected ? Theme.of(context).colorScheme.primary : Colors.white,
+        color:
+            isSelected ? Theme.of(context).colorScheme.primary : Colors.white,
         borderRadius: BorderRadius.circular(4),
         elevation: isSelected ? 2 : 1,
         child: InkWell(
@@ -155,22 +164,36 @@ class EditorToolbar extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           child: Container(
             padding: const EdgeInsets.all(8),
-            child: Icon(
-              icon,
-              color: isSelected ? Colors.white : Colors.grey[700],
-              size: 24,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  displayIcon,
+                  color: isSelected ? Colors.white : Colors.grey[700],
+                  size: 24,
+                ),
+                if (isSelected)
+                  Text(
+                    toolMode.label,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
-  
+
   List<Widget> _buildRoomTabs() {
     if (rooms.isEmpty) {
       return [];
     }
-    
+
     return rooms.map((room) {
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -193,7 +216,8 @@ class EditorToolbar extends StatelessWidget {
                   room.name,
                   style: TextStyle(
                     color: Colors.black87,
-                    fontWeight: room.selected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight:
+                        room.selected ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
                 const SizedBox(width: 4),

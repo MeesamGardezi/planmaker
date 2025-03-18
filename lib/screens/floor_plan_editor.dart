@@ -1,5 +1,6 @@
 // lib/screens/floor_plan_editor.dart
 import 'package:flutter/material.dart';
+import '../models/measurements.dart';
 import '../models/room.dart';
 import '../models/element.dart';
 import '../models/enums.dart';
@@ -69,6 +70,15 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   Room? targetSnapRoom;
   int? sourceWallIndex;
   int? targetWallIndex;
+
+  // Line drawing state
+  bool isDrawingLine = false;
+  Offset? lineStart;
+  Offset? lineEnd;
+
+  // Measurement state
+  List<Measurement> measurements = [];
+  Measurement? activeMeasurement;
 
   // Colors
   final List<Color> roomColors = [
@@ -253,6 +263,17 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   void _handleModeChange(EditorMode newMode) {
     setState(() {
       mode = newMode;
+      
+      // Clear temporary states if mode changes
+      if (isDrawingLine) {
+        isDrawingLine = false;
+        lineStart = null;
+        lineEnd = null;
+      }
+      
+      if (activeMeasurement != null) {
+        activeMeasurement = null;
+      }
     });
   }
 
@@ -356,6 +377,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     // Count all elements
     int doorCount = 0;
     int windowCount = 0;
+    int lineCount = 0;
 
     for (var room in rooms) {
       for (var element in room.elements) {
@@ -363,6 +385,8 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           doorCount++;
         } else if (element.type == ElementType.window) {
           windowCount++;
+        } else if (element.type == ElementType.line) {
+          lineCount++;
         }
       }
     }
@@ -371,6 +395,8 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       'roomCount': rooms.length,
       'doorCount': doorCount,
       'windowCount': windowCount,
+      'lineCount': lineCount,
+      'measurementCount': measurements.length,
     };
   }
 
@@ -412,11 +438,123 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       ),
     );
   }
+  
+  // Handle line drawing start
+  void _handleLineDrawingStart(Offset point) {
+    setState(() {
+      isDrawingLine = true;
+      lineStart = point;
+      lineEnd = point; // Initialize with same point
+    });
+  }
+
+  // Handle line drawing update
+  void _handleLineDrawingUpdate(Offset point) {
+    if (isDrawingLine && lineStart != null) {
+      setState(() {
+        lineEnd = point;
+      });
+    }
+  }
+
+  // Handle line drawing end
+  void _handleLineDrawingEnd() {
+    if (isDrawingLine && lineStart != null && lineEnd != null) {
+      // Ensure the points are different
+      if ((lineEnd! - lineStart!).distance > 5) {
+        final newLine = ArchitecturalElement.line(
+          start: lineStart!,
+          end: lineEnd!,
+          name: 'Line ${DateTime.now().millisecondsSinceEpoch}',
+        );
+        
+        setState(() {
+          // Add line to a room or to a separate list
+          if (selectedRoom != null) {
+            selectedRoom!.elements.add(newLine);
+            _selectElement(newLine);
+          } else if (rooms.isNotEmpty) {
+            // If no room is selected, add to first room
+            rooms.first.elements.add(newLine);
+            _selectElement(newLine);
+          }
+        });
+      }
+      
+      // Reset drawing state
+      setState(() {
+        isDrawingLine = false;
+        lineStart = null;
+        lineEnd = null;
+      });
+    }
+  }
+
+  // Handle measurement start
+  void _handleMeasurementStart(Offset point) {
+    setState(() {
+      activeMeasurement = Measurement(
+        start: point,
+        end: point,
+        measuredLength: 0,
+      );
+    });
+  }
+
+  // Handle measurement update
+  void _handleMeasurementUpdate(Offset point) {
+    if (activeMeasurement != null) {
+      setState(() {
+        activeMeasurement = Measurement(
+          start: activeMeasurement!.start,
+          end: point,
+          measuredLength: (point - activeMeasurement!.start).distance,
+        );
+      });
+    }
+  }
+
+  // Handle measurement end
+  void _handleMeasurementEnd() {
+    if (activeMeasurement != null) {
+      // Check if the measurement is meaningful (not too short)
+      if ((activeMeasurement!.end - activeMeasurement!.start).distance > 5) {
+        setState(() {
+          measurements.add(Measurement(
+            start: activeMeasurement!.start,
+            end: activeMeasurement!.end,
+            measuredLength: activeMeasurement!.measuredLength,
+            isTemporary: false,
+          ));
+        });
+      }
+      
+      // Reset active measurement
+      setState(() {
+        activeMeasurement = null;
+      });
+    }
+  }
+  
+  // Clear all measurements
+  void _clearMeasurements() {
+    setState(() {
+      measurements.clear();
+      activeMeasurement = null;
+    });
+  }
 
   void _handlePointerDown(PointerDownEvent event) {
     final point = _transformPoint(event.localPosition);
 
-    if (mode == EditorMode.select) {
+    // Handle based on current mode
+    if (mode == EditorMode.line) {
+      _handleLineDrawingStart(point);
+      return;
+    } else if (mode == EditorMode.measure) {
+      _handleMeasurementStart(point);
+      return;
+    } else if (mode == EditorMode.select) {
       // Try to find element under pointer
       ArchitecturalElement? element = _findElementAt(point);
       if (element != null) {
@@ -507,6 +645,38 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         _deleteRoom(room);
         return;
       }
+      
+      // Delete measurement if in range
+      for (int i = 0; i < measurements.length; i++) {
+        final measurement = measurements[i];
+        final line = (measurement.end - measurement.start);
+        final length = line.distance;
+        
+        // Check if point is near the measurement line
+        if (length > 0) {
+          final normalized = line / length;
+          final perpendicular = Offset(-normalized.dy, normalized.dx);
+          
+          // Project point onto line
+          final v = point - measurement.start;
+          final projection = v.dx * normalized.dx + v.dy * normalized.dy;
+          
+          // Check if projection is within line segment
+          if (projection >= 0 && projection <= length) {
+            // Calculate distance to line
+            final projPoint = measurement.start + normalized * projection;
+            final distance = (point - projPoint).distance;
+            
+            // If close enough, delete measurement
+            if (distance <= 10.0) {
+              setState(() {
+                measurements.removeAt(i);
+              });
+              return;
+            }
+          }
+        }
+      }
     } else if (mode == EditorMode.room) {
       // Create walls with default height
       List<Wall> walls = List.generate(
@@ -537,7 +707,14 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   void _handlePointerMove(PointerMoveEvent event) {
     final point = _transformPoint(event.localPosition);
 
-    if (isCanvasDragging && lastGlobalPosition != null) {
+    // Handle line drawing or measurement first
+    if (isDrawingLine) {
+      _handleLineDrawingUpdate(point);
+      return;
+    } else if (activeMeasurement != null) {
+      _handleMeasurementUpdate(point);
+      return;
+    } else if (isCanvasDragging && lastGlobalPosition != null) {
       // Handle canvas dragging (panning the view)
       final delta = event.position - lastGlobalPosition!;
       final matrix = transformationController.value;
@@ -570,8 +747,15 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   }
 
   void _handlePointerUp(PointerUpEvent event) {
-    // End canvas dragging
-    if (isCanvasDragging) {
+    // Handle line drawing or measurement completion
+    if (isDrawingLine) {
+      _handleLineDrawingEnd();
+      return;
+    } else if (activeMeasurement != null) {
+      _handleMeasurementEnd();
+      return;
+    } else if (isCanvasDragging) {
+      // End canvas dragging
       isCanvasDragging = false;
       lastGlobalPosition = null;
       return;
@@ -656,8 +840,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     Room? bestRoom;
     int bestWall1 = -1;
     int bestWall2 = -1;
-    Offset bestOffset = Offset.zero;
-
+    
     final walls1 = room.getWallSegments();
     
     for (var otherRoom in otherRooms) {
@@ -691,7 +874,6 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
               bestRoom = otherRoom;
               bestWall1 = i;
               bestWall2 = j;
-              bestOffset = offset;
             }
           }
         }
@@ -1078,6 +1260,9 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
             onZoomOut: () => _handleZoom(0.8),
             onResetView: _resetView,
             snapType: currentSnapType,
+            currentMode: mode,
+            measurements: measurements,
+            onClearMeasurements: _clearMeasurements,
           ),
         ],
       ),
@@ -1096,8 +1281,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         boundaryMargin: const EdgeInsets.all(1000),
         minScale: 0.1,
         maxScale: 5.0,
-        panEnabled:
-            false, // Disable default pan to use our custom implementation
+        panEnabled: false, // Disable default pan to use our custom implementation
         child: Container(
           width: 3000,
           height: 3000,
@@ -1120,6 +1304,11 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
               targetSnapRoom: targetSnapRoom,
               sourceWallIndex: sourceWallIndex,
               targetWallIndex: targetWallIndex,
+              measurements: measurements,
+              activeMeasurement: activeMeasurement,
+              isDrawingLine: isDrawingLine,
+              lineStart: lineStart,
+              lineEnd: lineEnd,
             ),
           ),
         ),
@@ -1384,6 +1573,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                       Text("Rooms: ${widget.projectStats['roomCount']}"),
                       Text("Doors: ${widget.projectStats['doorCount']}"),
                       Text("Windows: ${widget.projectStats['windowCount']}"),
+                      Text("Lines: ${widget.projectStats['lineCount'] ?? 0}"),
+                      Text("Measurements: ${widget.projectStats['measurementCount'] ?? 0}"),
                     ],
                   ),
                 ),
