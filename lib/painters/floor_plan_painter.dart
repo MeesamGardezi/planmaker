@@ -185,10 +185,14 @@ class FloorPlanPainter extends CustomPainter {
   }
   
   void _drawWallMeasurement(Canvas canvas, Offset start, Offset end) {
-    // Calculate wall length
+    // Calculate wall length in pixels
     final length = (end - start).distance;
+    
+    // Convert directly to the current unit system (e.g., feet)
     final realLength = length * gridRealSize / gridSize;
-    final formattedLength = MeasurementUtils.formatLength(realLength, unit);
+    
+    // Format using the improved util method that doesn't double-convert
+    final formattedLength = MeasurementUtils.formatLengthInUnit(realLength, unit);
     
     // Create text
     final textSpan = TextSpan(
@@ -933,8 +937,9 @@ class FloorPlanPainter extends CustomPainter {
       final width = room.width * gridRealSize / gridSize;
       final height = room.height * gridRealSize / gridSize;
       
-      final widthText = MeasurementUtils.formatLength(width, unit);
-      final heightText = MeasurementUtils.formatLength(height, unit);
+      // Use the direct formatting without double conversion
+      final widthText = MeasurementUtils.formatLengthInUnit(width, unit);
+      final heightText = MeasurementUtils.formatLengthInUnit(height, unit);
       
       // Draw width dimension text
       final widthTextSpan = TextSpan(

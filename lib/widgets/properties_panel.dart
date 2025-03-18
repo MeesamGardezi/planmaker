@@ -81,12 +81,18 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
       text: widget.selectedRoom?.name ?? ''
     );
     
+    // Room width in current units (not pixels)
     _roomWidthController = TextEditingController(
-      text: _formatGridUnits(widget.selectedRoom?.width ?? 0)
+      text: widget.selectedRoom != null 
+          ? _pixelsToCurrentUnit(widget.selectedRoom!.width).toStringAsFixed(2)
+          : ''
     );
     
+    // Room height in current units (not pixels)
     _roomHeightController = TextEditingController(
-      text: _formatGridUnits(widget.selectedRoom?.height ?? 0)
+      text: widget.selectedRoom != null 
+          ? _pixelsToCurrentUnit(widget.selectedRoom!.height).toStringAsFixed(2)
+          : ''
     );
     
     // Wall controllers
@@ -105,12 +111,18 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
             widget.selectedElement?.type.label ?? ''
     );
     
+    // Element width in current units (not pixels)
     _elementWidthController = TextEditingController(
-      text: _formatGridUnits(widget.selectedElement?.width ?? 0)
+      text: widget.selectedElement != null 
+          ? _pixelsToCurrentUnit(widget.selectedElement!.width).toStringAsFixed(2)
+          : ''
     );
     
+    // Element height in current units (not pixels)
     _elementHeightController = TextEditingController(
-      text: _formatGridUnits(widget.selectedElement?.height ?? 0)
+      text: widget.selectedElement != null 
+          ? _pixelsToCurrentUnit(widget.selectedElement!.height).toStringAsFixed(2)
+          : ''
     );
     
     _elementRotationController = TextEditingController(
@@ -139,16 +151,22 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
     super.dispose();
   }
   
-  // Format grid units to real-world units
-  String _formatGridUnits(double gridUnits) {
-    final realUnits = gridUnits * widget.gridRealSize / widget.gridSize;
-    return realUnits.toStringAsFixed(2);
+  // Convert pixels to current unit system (e.g., feet)
+  double _pixelsToCurrentUnit(double pixelValue) {
+    return MeasurementUtils.gridToReal(
+      pixelValue, 
+      widget.gridSize, 
+      widget.gridRealSize
+    );
   }
   
-  // Convert real-world units back to grid units
-  double _parseToGridUnits(String realUnitsStr) {
-    final double realUnits = double.tryParse(realUnitsStr) ?? 0;
-    return realUnits * widget.gridSize / widget.gridRealSize;
+  // Convert current unit (e.g., feet) to pixels
+  double _currentUnitToPixels(double unitValue) {
+    return MeasurementUtils.realToGrid(
+      unitValue, 
+      widget.gridSize, 
+      widget.gridRealSize
+    );
   }
   
   // Update wall property and refresh UI
@@ -281,7 +299,8 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
                 onChanged: (value) {
                   final double? parsed = double.tryParse(value);
                   if (parsed != null) {
-                    final gridUnits = _parseToGridUnits(value);
+                    // Convert from current unit to pixels
+                    final gridUnits = _currentUnitToPixels(parsed);
                     widget.onRoomWidthChanged(room, gridUnits);
                   }
                 },
@@ -311,7 +330,8 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
                 onChanged: (value) {
                   final double? parsed = double.tryParse(value);
                   if (parsed != null) {
-                    final gridUnits = _parseToGridUnits(value);
+                    // Convert from current unit to pixels
+                    final gridUnits = _currentUnitToPixels(parsed);
                     widget.onRoomHeightChanged(room, gridUnits);
                   }
                 },
@@ -393,7 +413,6 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("Elements: ${room.elements.length}"),
-              Text("Perimeter: ${MeasurementUtils.formatLength(room.getPerimeter(widget.gridSize, widget.gridRealSize), widget.unit)}"),
             ],
           ),
         ),
@@ -528,7 +547,8 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
                 onChanged: (value) {
                   final double? parsed = double.tryParse(value);
                   if (parsed != null) {
-                    final gridUnits = _parseToGridUnits(value);
+                    // Convert from current unit to pixels
+                    final gridUnits = _currentUnitToPixels(parsed);
                     widget.onElementWidthChanged(element, gridUnits);
                   }
                 },
@@ -558,7 +578,8 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
                 onChanged: (value) {
                   final double? parsed = double.tryParse(value);
                   if (parsed != null) {
-                    final gridUnits = _parseToGridUnits(value);
+                    // Convert from current unit to pixels
+                    final gridUnits = _currentUnitToPixels(parsed);
                     widget.onElementHeightChanged(element, gridUnits);
                   }
                 },
@@ -649,8 +670,15 @@ class _PropertiesPanelState extends State<PropertiesPanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("X: ${MeasurementUtils.formatLength(element.position.dx * widget.gridRealSize / widget.gridSize, widget.unit)}"),
-              Text("Y: ${MeasurementUtils.formatLength(element.position.dy * widget.gridRealSize / widget.gridSize, widget.unit)}"),
+              // Format position coordinates correctly in the current unit system
+              Text("X: ${MeasurementUtils.formatLengthInUnit(
+                _pixelsToCurrentUnit(element.position.dx), 
+                widget.unit
+              )}"),
+              Text("Y: ${MeasurementUtils.formatLengthInUnit(
+                _pixelsToCurrentUnit(element.position.dy), 
+                widget.unit
+              )}"),
               
               if (element.room != null)
                 Padding(

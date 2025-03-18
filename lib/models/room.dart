@@ -287,17 +287,7 @@ class Room {
         : null;
   }
 
-  // Calculate room perimeter length
-  double getPerimeter(double gridSize, double gridRealSize) {
-    final walls = getWallSegments();
-    double perimeter = 0;
-    
-    for (var wall in walls) {
-      perimeter += (wall.$2 - wall.$1).distance;
-    }
-    
-    return perimeter * gridRealSize / gridSize;
-  }
+  
   
   // Check if two walls are parallel
   static bool areWallsParallel((Offset, Offset) wall1, (Offset, Offset) wall2) {
