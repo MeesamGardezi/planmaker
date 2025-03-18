@@ -16,14 +16,14 @@ class Wall {
   double breadth;
   String? material;
   Color? color;
-  
+
   Wall({
     this.height = 8.0, // Default height in feet
     this.breadth = 0.5, // Default breadth/thickness in feet
     this.material,
     this.color,
   });
-  
+
   // Deep copy constructor
   Wall.clone(Wall source)
       : height = source.height,
@@ -41,17 +41,18 @@ class Room {
   Offset position;
   bool isDragging = false;
   List<ArchitecturalElement> elements = [];
-  
+
   // Wall properties - one Wall object for each wall
   final List<Wall> walls;
 
   // Track drag-related data
   Offset? dragStartPosition;
   Offset? lastDragPosition;
-  
+
   // Shared wall tracking
-  List<(Room, int, int)> sharedWalls = []; // (connected room, this wall index, other wall index)
-  
+  List<(Room, int, int)> sharedWalls =
+      []; // (connected room, this wall index, other wall index)
+
   // Selection hitbox expansion (makes selection easier)
   final double selectionPadding = 5.0;
 
@@ -68,36 +69,36 @@ class Room {
   bool containsPoint(Offset point) {
     final halfWidth = width / 2 + (selected ? selectionPadding : 0);
     final halfHeight = height / 2 + (selected ? selectionPadding : 0);
-    
+
     return point.dx >= position.dx - halfWidth &&
-           point.dx <= position.dx + halfWidth &&
-           point.dy >= position.dy - halfHeight &&
-           point.dy <= position.dy + halfHeight;
+        point.dx <= position.dx + halfWidth &&
+        point.dy >= position.dy - halfHeight &&
+        point.dy <= position.dy + halfHeight;
   }
-  
+
   void startDrag(Offset point) {
     isDragging = true;
     dragStartPosition = point;
     lastDragPosition = point;
   }
-  
+
   void drag(Offset point) {
     if (!isDragging || lastDragPosition == null) return;
-    
+
     final delta = point - lastDragPosition!;
     move(delta);
     lastDragPosition = point;
   }
-  
+
   void endDrag() {
     isDragging = false;
     dragStartPosition = null;
     lastDragPosition = null;
   }
-  
+
   void move(Offset delta) {
     position += delta;
-    
+
     // Update all elements
     for (var element in elements) {
       element.position += delta;
@@ -105,23 +106,23 @@ class Room {
   }
 
   Rect get rect => Rect.fromCenter(
-    center: position,
-    width: width,
-    height: height,
-  );
+        center: position,
+        width: width,
+        height: height,
+      );
 
   // Selection visual rect (slightly larger than the room for easier selection)
   Rect get selectionRect => Rect.fromCenter(
-    center: position,
-    width: width + (selected ? selectionPadding * 2 : 0),
-    height: height + (selected ? selectionPadding * 2 : 0),
-  );
+        center: position,
+        width: width + (selected ? selectionPadding * 2 : 0),
+        height: height + (selected ? selectionPadding * 2 : 0),
+      );
 
   // Get room corners
   List<Offset> getCorners() {
     final halfWidth = width / 2;
     final halfHeight = height / 2;
-    
+
     return [
       Offset(position.dx - halfWidth, position.dy - halfHeight), // Top-left
       Offset(position.dx + halfWidth, position.dy - halfHeight), // Top-right
@@ -129,7 +130,7 @@ class Room {
       Offset(position.dx - halfWidth, position.dy + halfHeight), // Bottom-left
     ];
   }
-  
+
   // Get corner descriptions for tooltips and display
   List<String> getCornerDescriptions() {
     return [
@@ -139,11 +140,11 @@ class Room {
       "Bottom-left",
     ];
   }
-  
+
   // Get wall segments as a list of (start, end) point pairs
   List<(Offset, Offset)> getWallSegments() {
     final points = getCorners();
-    
+
     return [
       (points[0], points[1]), // Top wall (0)
       (points[1], points[2]), // Right wall (1)
@@ -151,12 +152,12 @@ class Room {
       (points[3], points[0]), // Left wall (3)
     ];
   }
-  
+
   // Get wall directions (0 = horizontal, 1 = vertical)
   List<int> getWallDirections() {
     return [0, 1, 0, 1]; // top, right, bottom, left
   }
-  
+
   // Get wall descriptions for tooltips and display
   List<String> getWallDescriptions() {
     return [
@@ -166,97 +167,102 @@ class Room {
       "Left wall",
     ];
   }
-  
+
   // Get wall lengths in pixels
   List<double> getWallLengths() {
     final segments = getWallSegments();
-    return segments.map((segment) => (segment.$2 - segment.$1).distance).toList();
+    return segments
+        .map((segment) => (segment.$2 - segment.$1).distance)
+        .toList();
   }
-  
+
   // Get wall lengths in real world units
   List<double> getWallRealLengths(double gridSize, double gridRealSize) {
     final pixelLengths = getWallLengths();
-    return pixelLengths.map((length) => length * gridRealSize / gridSize).toList();
+    return pixelLengths
+        .map((length) => length * gridRealSize / gridSize)
+        .toList();
   }
-  
+
   // Calculate wall area for a specific wall
   double getWallArea(int wallIndex, double gridSize, double gridRealSize) {
     final pixelLength = getWallLengths()[wallIndex];
     final realLength = pixelLength * gridRealSize / gridSize;
-    
+
     final wall = walls[wallIndex];
     return realLength * wall.height;
   }
-  
+
   // Calculate wall volume for a specific wall
   double getWallVolume(int wallIndex, double gridSize, double gridRealSize) {
     final pixelLength = getWallLengths()[wallIndex];
     final realLength = pixelLength * gridRealSize / gridSize;
-    
+
     final wall = walls[wallIndex];
     return realLength * wall.height * wall.breadth;
   }
-  
+
   // Calculate areas for all walls
   List<double> getAllWallAreas(double gridSize, double gridRealSize) {
     final realLengths = getWallRealLengths(gridSize, gridRealSize);
-    
+
     List<double> areas = [];
     for (int i = 0; i < 4; i++) {
       areas.add(realLengths[i] * walls[i].height);
     }
-    
+
     return areas;
   }
-  
+
   // Calculate volumes for all walls
   List<double> getAllWallVolumes(double gridSize, double gridRealSize) {
     final realLengths = getWallRealLengths(gridSize, gridRealSize);
-    
+
     List<double> volumes = [];
     for (int i = 0; i < 4; i++) {
       volumes.add(realLengths[i] * walls[i].height * walls[i].breadth);
     }
-    
+
     return volumes;
   }
-  
+
   // Helper method to calculate the distance from a point to a wall segment
   static double distanceToWall(Offset point, (Offset, Offset) wall) {
     final start = wall.$1;
     final end = wall.$2;
-    
+
     // Vector from start to end
     final wallVector = end - start;
     final wallLength = wallVector.distance;
-    
+
     // If wall has no length, return distance to start point
     if (wallLength < 0.001) return (point - start).distance;
-    
+
     // Normalized wall vector
-    final wallNormal = Offset(wallVector.dx / wallLength, wallVector.dy / wallLength);
-    
+    final wallNormal = wallVector.normalized();
+
     // Vector from start to point
     final pointVector = point - start;
-    
+
     // Project pointVector onto wallVector to find the closest point on the wall
-    final projection = pointVector.dx * wallNormal.dx + pointVector.dy * wallNormal.dy;
-    
+    final projection =
+        pointVector.dx * wallNormal.dx + pointVector.dy * wallNormal.dy;
+
     // Clamp projection to wall length
     final clampedProjection = projection.clamp(0.0, wallLength);
-    
+
     // Calculate closest point on wall
-    final closestPoint = start + Offset(
-      wallNormal.dx * clampedProjection,
-      wallNormal.dy * clampedProjection
-    );
-    
+    final closestPoint = start +
+        Offset(wallNormal.dx * clampedProjection,
+            wallNormal.dy * clampedProjection);
+
     // Return distance from point to closest point on wall
     return (point - closestPoint).distance;
   }
-  
+
   // Determine if a point is inside the wall segment with given tolerance
-  static bool isPointOnWall(Offset point, (Offset, Offset) wall, double tolerance) {
+  static bool isPointOnWall(
+      Offset point, (Offset, Offset) wall, double tolerance) {
     return distanceToWall(point, wall) <= tolerance;
   }
 
@@ -264,146 +270,186 @@ class Room {
   static bool areWallsParallel((Offset, Offset) wall1, (Offset, Offset) wall2) {
     final wall1Vector = wall1.$2 - wall1.$1;
     final wall2Vector = wall2.$2 - wall2.$1;
-    
+
     // Skip very short walls
     if (wall1Vector.distance < 1.0 || wall2Vector.distance < 1.0) {
       return false;
     }
-    
+
     // Calculate normalized directional vectors
-    final wall1Dir = Offset(
-      wall1Vector.dx / wall1Vector.distance,
-      wall1Vector.dy / wall1Vector.distance
-    );
-    
-    final wall2Dir = Offset(
-      wall2Vector.dx / wall2Vector.distance,
-      wall2Vector.dy / wall2Vector.distance
-    );
-    
+    final wall1Dir = wall1Vector.normalized();
+    final wall2Dir = wall2Vector.normalized();
+
     // Dot product close to 1 or -1 means parallel
     final dot = wall1Dir.dx * wall2Dir.dx + wall1Dir.dy * wall2Dir.dy;
-    
+
     // Check if walls are primarily in the same direction
-    // This ensures we're not connecting walls that are at right angles to each other
     final isHorizontal1 = wall1Vector.dx.abs() > wall1Vector.dy.abs();
     final isHorizontal2 = wall2Vector.dx.abs() > wall2Vector.dy.abs();
-    
-    return (dot.abs() > 0.9) && (isHorizontal1 == isHorizontal2); // More strict parallel check (0.9 instead of 0.97)
+
+    // More lenient check (0.85 instead of 0.9)
+    return (dot.abs() > 0.85) && (isHorizontal1 == isHorizontal2);
   }
-  
+
   // Check if two walls are aligned (parallel and collinear)
-  static bool areWallsAligned((Offset, Offset) wall1, (Offset, Offset) wall2, double tolerance) {
+  static bool areWallsAligned(
+      (Offset, Offset) wall1, (Offset, Offset) wall2, double tolerance) {
     if (!areWallsParallel(wall1, wall2)) return false;
-    
-    // For aligned walls, the average distance between all points should be small
-    final avgDistance = (
-      distanceToWall(wall1.$1, wall2) +
-      distanceToWall(wall1.$2, wall2) +
-      distanceToWall(wall2.$1, wall1) +
-      distanceToWall(wall2.$2, wall1)
-    ) / 4.0;
-    
-    return avgDistance <= tolerance;
+
+    // For aligned walls, the distance between points should be small
+    final avgDistance = (distanceToWall(wall1.$1, wall2) +
+            distanceToWall(wall1.$2, wall2) +
+            distanceToWall(wall2.$1, wall1) +
+            distanceToWall(wall2.$2, wall1)) /
+        4.0;
+
+    // Be more generous with tolerance
+    return avgDistance <= tolerance * 1.5;
   }
-  
-  // Check if two walls partially or fully overlap
-  static bool doWallsOverlap((Offset, Offset) wall1, (Offset, Offset) wall2, double tolerance) {
-    if (!areWallsAligned(wall1, wall2, tolerance)) return false;
-    
-    // Determine wall orientation (horizontal or vertical)
+
+  static bool doWallsOverlap(
+      (Offset, Offset) wall1, (Offset, Offset) wall2, double tolerance) {
+    // First check if walls are parallel
     final wall1Vector = wall1.$2 - wall1.$1;
-    final isHorizontal = wall1Vector.dy.abs() < wall1Vector.dx.abs();
-    
-    if (isHorizontal) {
-      // For horizontal walls, check x-axis overlap with increased tolerance
+    final wall2Vector = wall2.$2 - wall2.$1;
+
+    // Skip very short walls
+    if (wall1Vector.distance < 1.0 || wall2Vector.distance < 1.0) {
+      return false;
+    }
+
+    // Calculate normalized directional vectors
+    final wall1Dir = wall1Vector.normalized();
+    final wall2Dir = wall2Vector.normalized();
+
+    // Dot product close to 1 or -1 means parallel
+    final dot = wall1Dir.dx * wall2Dir.dx + wall1Dir.dy * wall2Dir.dy;
+
+    // For debugging - print the dot product
+    print('Wall overlap check - dot product: ${dot.abs()}');
+
+    // Check if walls are in the same orientation (both horizontal or both vertical)
+    final isHorizontal1 = wall1Vector.dx.abs() > wall1Vector.dy.abs();
+    final isHorizontal2 = wall2Vector.dx.abs() > wall2Vector.dy.abs();
+
+    // If they're not parallel or not in the same orientation, they can't overlap
+    if (dot.abs() < 0.80 || isHorizontal1 != isHorizontal2) {
+      return false;
+    }
+
+    // Now check if they're close to each other
+    final avgDistance = (distanceToWall(wall1.$1, wall2) +
+            distanceToWall(wall1.$2, wall2) +
+            distanceToWall(wall2.$1, wall1) +
+            distanceToWall(wall2.$2, wall1)) /
+        4.0;
+
+    print('Wall overlap check - average distance: $avgDistance');
+
+    // If they're not close enough, they can't overlap
+    if (avgDistance > tolerance * 2) {
+      return false;
+    }
+
+    // Now calculate the overlap
+    if (isHorizontal1) {
+      // For horizontal walls
       final x1 = [wall1.$1.dx, wall1.$2.dx];
       final x2 = [wall2.$1.dx, wall2.$2.dx];
       x1.sort();
       x2.sort();
-      
+
+      // Check Y-coordinates difference
+      final y1 = (wall1.$1.dy + wall1.$2.dy) / 2;
+      final y2 = (wall2.$1.dy + wall2.$2.dy) / 2;
+
+      if ((y1 - y2).abs() > tolerance) {
+        return false;
+      }
+
       // Calculate overlap
       final overlapStart = math.max(x1[0], x2[0]);
       final overlapEnd = math.min(x1[1], x2[1]);
       final overlap = overlapEnd - overlapStart;
-      
-      // Define minimum overlap as a percentage of the shorter wall
-      final shortestWallLength = math.min(
-        (wall1.$2 - wall1.$1).distance,
-        (wall2.$2 - wall2.$1).distance
-      );
-      final minRequiredOverlap = shortestWallLength * 0.3; // 30% overlap required
-      
-      // Check if overlap is significant
-      return overlap > minRequiredOverlap;
+
+      print('Horizontal wall overlap: $overlap');
+
+      // Even a small overlap is enough if they're properly aligned
+      return overlap > 0;
     } else {
-      // For vertical walls, check y-axis overlap
+      // For vertical walls
       final y1 = [wall1.$1.dy, wall1.$2.dy];
       final y2 = [wall2.$1.dy, wall2.$2.dy];
       y1.sort();
       y2.sort();
-      
+
+      // Check X-coordinates difference
+      final x1 = (wall1.$1.dx + wall1.$2.dx) / 2;
+      final x2 = (wall2.$1.dx + wall2.$2.dx) / 2;
+
+      if ((x1 - x2).abs() > tolerance) {
+        return false;
+      }
+
       // Calculate overlap
       final overlapStart = math.max(y1[0], y2[0]);
       final overlapEnd = math.min(y1[1], y2[1]);
       final overlap = overlapEnd - overlapStart;
-      
-      // Define minimum overlap as a percentage of the shorter wall
-      final shortestWallLength = math.min(
-        (wall1.$2 - wall1.$1).distance,
-        (wall2.$2 - wall2.$1).distance
-      );
-      final minRequiredOverlap = shortestWallLength * 0.3; // 30% overlap required
-      
-      // Check if overlap is significant
-      return overlap > minRequiredOverlap;
+
+      print('Vertical wall overlap: $overlap');
+
+      // Even a small overlap is enough if they're properly aligned
+      return overlap > 0;
     }
   }
-  
+
   // Calculate the overlap length between two walls
-  static double getWallsOverlapLength((Offset, Offset) wall1, (Offset, Offset) wall2) {
+  static double getWallsOverlapLength(
+      (Offset, Offset) wall1, (Offset, Offset) wall2) {
     final wall1Vector = wall1.$2 - wall1.$1;
-    final isHorizontal = wall1Vector.dy.abs() < 0.001;
-    
+    final isHorizontal = wall1Vector.dx.abs() > wall1Vector.dy.abs();
+
     if (isHorizontal) {
       // Sort x coordinates
       final x1 = [wall1.$1.dx, wall1.$2.dx]..sort();
       final x2 = [wall2.$1.dx, wall2.$2.dx]..sort();
-      
+
       // Calculate overlap
       if (x1[1] < x2[0] || x2[1] < x1[0]) return 0;
-      return (x1[1] < x2[1] ? x1[1] : x2[1]) - (x1[0] > x2[0] ? x1[0] : x2[0]);
+      return math.min(x1[1], x2[1]) - math.max(x1[0], x2[0]);
     } else {
       // Sort y coordinates
       final y1 = [wall1.$1.dy, wall1.$2.dy]..sort();
       final y2 = [wall2.$1.dy, wall2.$2.dy]..sort();
-      
+
       // Calculate overlap
       if (y1[1] < y2[0] || y2[1] < y1[0]) return 0;
-      return (y1[1] < y2[1] ? y1[1] : y2[1]) - (y1[0] > y2[0] ? y1[0] : y2[0]);
+      return math.min(y1[1], y2[1]) - math.max(y1[0], y2[0]);
     }
   }
-  
+
   // Get the projection of a wall onto an axis
-  static (double, double) projectWallToAxis((Offset, Offset) wall, bool horizontal) {
+  static (double, double) projectWallToAxis(
+      (Offset, Offset) wall, bool horizontal) {
     if (horizontal) {
-      final min = wall.$1.dx < wall.$2.dx ? wall.$1.dx : wall.$2.dx;
-      final max = wall.$1.dx > wall.$2.dx ? wall.$1.dx : wall.$2.dx;
+      final min = math.min(wall.$1.dx, wall.$2.dx);
+      final max = math.max(wall.$1.dx, wall.$2.dx);
       return (min, max);
     } else {
-      final min = wall.$1.dy < wall.$2.dy ? wall.$1.dy : wall.$2.dy;
-      final max = wall.$1.dy > wall.$2.dy ? wall.$1.dy : wall.$2.dy;
+      final min = math.min(wall.$1.dy, wall.$2.dy);
+      final max = math.max(wall.$1.dy, wall.$2.dy);
       return (min, max);
     }
   }
-  
+
   // Find the offset needed to align a wall with another wall
-  static Offset getWallAlignmentOffset((Offset, Offset) sourceWall, (Offset, Offset) targetWall) {
+  static Offset getWallAlignmentOffset(
+      (Offset, Offset) sourceWall, (Offset, Offset) targetWall) {
     if (!areWallsParallel(sourceWall, targetWall)) return Offset.zero;
-    
+
     final sourceVector = sourceWall.$2 - sourceWall.$1;
-    final isHorizontal = sourceVector.dy.abs() < 0.001;
-    
+    final isHorizontal = sourceVector.dx.abs() > sourceVector.dy.abs();
+
     if (isHorizontal) {
       // For horizontal walls, align y coordinates
       return Offset(0, targetWall.$1.dy - sourceWall.$1.dy);
@@ -412,30 +458,40 @@ class Room {
       return Offset(targetWall.$1.dx - sourceWall.$1.dx, 0);
     }
   }
-  
+
   // Add a shared wall connection
   void addSharedWall(Room otherRoom, int thisWallIndex, int otherWallIndex) {
     // Check if connection already exists
+    bool connectionExists = false;
     for (var connection in sharedWalls) {
-      if (connection.$1 == otherRoom && 
-          connection.$2 == thisWallIndex && 
+      if (connection.$1 == otherRoom &&
+          connection.$2 == thisWallIndex &&
           connection.$3 == otherWallIndex) {
-        return; // Connection already exists
+        connectionExists = true;
+        break;
       }
     }
-    
-    // Add new connection
-    sharedWalls.add((otherRoom, thisWallIndex, otherWallIndex));
-    
-    // Also add connection to the other room if not already there
-    bool connectionExists = otherRoom.sharedWalls
-        .any((conn) => conn.$1 == this && conn.$2 == otherWallIndex && conn.$3 == thisWallIndex);
-        
+
+    // Add new connection if it doesn't exist
     if (!connectionExists) {
-      otherRoom.addSharedWall(this, otherWallIndex, thisWallIndex);
+      sharedWalls.add((otherRoom, thisWallIndex, otherWallIndex));
+      print(
+          'Added shared wall: ${this.name} wall $thisWallIndex with ${otherRoom.name} wall $otherWallIndex');
+
+      // Also add connection to the other room if not already there
+      bool reverseConnectionExists = otherRoom.sharedWalls.any((conn) =>
+          conn.$1 == this &&
+          conn.$2 == otherWallIndex &&
+          conn.$3 == thisWallIndex);
+
+      if (!reverseConnectionExists) {
+        otherRoom.sharedWalls.add((this, otherWallIndex, thisWallIndex));
+        print(
+            'Added reverse connection: ${otherRoom.name} wall $otherWallIndex with ${this.name} wall $thisWallIndex');
+      }
     }
   }
-  
+
   // Remove all shared wall connections
   void clearSharedWalls() {
     // Remove this room from other rooms' shared walls
@@ -443,16 +499,21 @@ class Room {
       final otherRoom = connection.$1;
       otherRoom.sharedWalls.removeWhere((conn) => conn.$1 == this);
     }
-    
+
     // Clear this room's shared walls
     sharedWalls.clear();
   }
-  
+
   // Check if a wall is shared with another room
   bool isWallShared(int wallIndex) {
-    return sharedWalls.any((connection) => connection.$2 == wallIndex);
+    for (var connection in sharedWalls) {
+      if (connection.$2 == wallIndex) {
+        return true;
+      }
+    }
+    return false;
   }
-  
+
   // Get all rooms that share a specific wall
   List<Room> getRoomsWithSharedWall(int wallIndex) {
     return sharedWalls
@@ -462,24 +523,25 @@ class Room {
   }
 
   // Find best wall-to-wall alignment between two rooms
-  static (Offset, int, int)? findBestWallAlignment(Room room1, Room room2, double snapDistance) {
+  static (Offset, int, int)? findBestWallAlignment(
+      Room room1, Room room2, double snapDistance) {
     if (room1 == room2) return null;
-    
+
     final walls1 = room1.getWallSegments();
     final walls2 = room2.getWallSegments();
-    
+
     double bestDistance = double.infinity;
     Offset bestOffset = Offset.zero;
     int bestWallIndex1 = -1;
     int bestWallIndex2 = -1;
-    
+
     // Check all wall pairs
     for (int i = 0; i < walls1.length; i++) {
       for (int j = 0; j < walls2.length; j++) {
         if (areWallsParallel(walls1[i], walls2[j])) {
           final alignmentOffset = getWallAlignmentOffset(walls1[i], walls2[j]);
           final distance = alignmentOffset.distance;
-          
+
           if (distance < bestDistance && distance <= snapDistance) {
             bestDistance = distance;
             bestOffset = alignmentOffset;
@@ -489,41 +551,42 @@ class Room {
         }
       }
     }
-    
+
     if (bestWallIndex1 >= 0 && bestWallIndex2 >= 0) {
       return (bestOffset, bestWallIndex1, bestWallIndex2);
     }
-    
+
     return null;
   }
-  
+
   // Find possible wall alignments with other rooms
   static List<(Offset, Room, int, int)> findAllPossibleWallAlignments(
       Room room, List<Room> otherRooms, double snapDistance) {
     final List<(Offset, Room, int, int)> alignments = [];
-    
+
     for (var otherRoom in otherRooms) {
       if (otherRoom == room) continue;
-      
+
       final alignment = findBestWallAlignment(room, otherRoom, snapDistance);
       if (alignment != null) {
         alignments.add((alignment.$1, otherRoom, alignment.$2, alignment.$3));
       }
     }
-    
+
     // Sort by distance (closest first)
     alignments.sort((a, b) => a.$1.distance.compareTo(b.$1.distance));
-    
+
     return alignments;
   }
-  
+
   // Find closest corner for snapping
-  static (Offset, double, int, Room)? findClosestCorner(Offset point, List<Room> rooms, double snapDistance) {
+  static (Offset, double, int, Room)? findClosestCorner(
+      Offset point, List<Room> rooms, double snapDistance) {
     Offset closestPoint = point;
     double minDistance = double.infinity;
     int cornerIndex = -1;
     Room? closestRoom;
-    
+
     for (var room in rooms) {
       final corners = room.getCorners();
       for (int i = 0; i < corners.length; i++) {
@@ -536,12 +599,12 @@ class Room {
         }
       }
     }
-    
-    return (minDistance < snapDistance && closestRoom != null) 
-        ? (closestPoint, minDistance, cornerIndex, closestRoom) 
+
+    return (minDistance < snapDistance && closestRoom != null)
+        ? (closestPoint, minDistance, cornerIndex, closestRoom)
         : null;
   }
-  
+
   // Find closest midpoint between two corners
   static (Offset, double, (Offset, Offset), Room)? findClosestMidpoint(
       Offset point, List<Room> rooms, double snapDistance) {
@@ -549,16 +612,16 @@ class Room {
     double minDistance = double.infinity;
     (Offset, Offset) closestWall = (Offset.zero, Offset.zero);
     Room? closestRoom;
-    
+
     for (var room in rooms) {
       final walls = room.getWallSegments();
-      
+
       for (int i = 0; i < walls.length; i++) {
         final midpoint = Offset(
           (walls[i].$1.dx + walls[i].$2.dx) / 2,
           (walls[i].$1.dy + walls[i].$2.dy) / 2,
         );
-        
+
         final distance = (point - midpoint).distance;
         if (distance < minDistance && distance <= snapDistance) {
           minDistance = distance;
@@ -568,12 +631,12 @@ class Room {
         }
       }
     }
-    
-    return (minDistance < snapDistance && closestRoom != null) 
-        ? (closestPoint, minDistance, closestWall, closestRoom) 
+
+    return (minDistance < snapDistance && closestRoom != null)
+        ? (closestPoint, minDistance, closestWall, closestRoom)
         : null;
   }
-  
+
   // Find closest point on any wall
   static (Offset, double, (Offset, Offset), Room)? findClosestWallPoint(
       Offset point, List<Room> rooms, double snapDistance) {
@@ -581,42 +644,39 @@ class Room {
     Offset closestPoint = point;
     (Offset, Offset) closestWall = (Offset.zero, Offset.zero);
     Room? closestRoom;
-    
+
     for (var room in rooms) {
       final walls = room.getWallSegments();
-      
+
       for (var wall in walls) {
         final start = wall.$1;
         final end = wall.$2;
-        
+
         // Vector from start to end
         final wallVector = end - start;
         final wallLength = wallVector.distance;
-        
+
         // Normalized wall vector
-        final wallNormal = Offset(
-          wallVector.dx / wallLength,
-          wallVector.dy / wallLength
-        );
-        
+        final wallNormal = wallVector.normalized();
+
         // Vector from start to point
         final pointVector = point - start;
-        
+
         // Project pointVector onto wallVector
-        final projection = pointVector.dx * wallNormal.dx + pointVector.dy * wallNormal.dy;
-        
+        final projection =
+            pointVector.dx * wallNormal.dx + pointVector.dy * wallNormal.dy;
+
         // Clamp projection to wall length
         final clampedProjection = projection.clamp(0.0, wallLength);
-        
+
         // Calculate closest point on wall
-        final pointOnWall = start + Offset(
-          wallNormal.dx * clampedProjection,
-          wallNormal.dy * clampedProjection
-        );
-        
+        final pointOnWall = start +
+            Offset(wallNormal.dx * clampedProjection,
+                wallNormal.dy * clampedProjection);
+
         // Calculate distance to wall
         final distance = (point - pointOnWall).distance;
-        
+
         if (distance < minDistance && distance <= snapDistance) {
           minDistance = distance;
           closestPoint = pointOnWall;
@@ -625,71 +685,76 @@ class Room {
         }
       }
     }
-    
-    return (minDistance < snapDistance && closestRoom != null) 
-        ? (closestPoint, minDistance, closestWall, closestRoom) 
+
+    return (minDistance < snapDistance && closestRoom != null)
+        ? (closestPoint, minDistance, closestWall, closestRoom)
         : null;
   }
-  
+
   // Get area in square units
   double getArea(double gridSize, double gridRealSize) {
-    return width * height * (gridRealSize / gridSize) * (gridRealSize / gridSize);
+    return width *
+        height *
+        (gridRealSize / gridSize) *
+        (gridRealSize / gridSize);
   }
-  
+
   // Get room volume in cubic units
   double getVolume(double gridSize, double gridRealSize) {
     // Use the height of the top wall as the room height
     final roomHeight = walls[0].height;
     return getArea(gridSize, gridRealSize) * roomHeight;
   }
-  
+
   // Get perimeter in linear units
   double getPerimeter(double gridSize, double gridRealSize) {
     // Calculate perimeter excluding shared walls
     double perimeter = 0;
-    final walls = getWallSegments();
-    
-    for (int i = 0; i < walls.length; i++) {
+    final wallSegments = getWallSegments();
+
+    for (int i = 0; i < wallSegments.length; i++) {
       if (!isWallShared(i)) {
         // Only count non-shared walls
-        final wallLength = (walls[i].$2 - walls[i].$1).distance;
+        final wallLength = (wallSegments[i].$2 - wallSegments[i].$1).distance;
         perimeter += wallLength;
       }
     }
-    
+
     return perimeter * (gridRealSize / gridSize);
   }
-  
+
   // Calculate total surface area (walls + floor + ceiling)
   double getTotalSurfaceArea(double gridSize, double gridRealSize) {
     double surfaceArea = 0;
-    
+
     // Add floor and ceiling area
     final floorArea = getArea(gridSize, gridRealSize);
     surfaceArea += floorArea * 2; // Floor + ceiling
-    
+
     // Add wall areas (excluding doors and windows)
     final wallAreas = getAllWallAreas(gridSize, gridRealSize);
     for (int i = 0; i < wallAreas.length; i++) {
       if (!isWallShared(i)) {
         surfaceArea += wallAreas[i];
+      } else {
+        // Add half of the shared wall area (since it's counted in both rooms)
+        surfaceArea += wallAreas[i] * 0.5;
       }
     }
-    
+
     // Subtract door and window areas
     for (var element in elements) {
-      final elementWidth = element.width * gridRealSize / gridSize;
-      final elementHeight = element.height * gridRealSize / gridSize;
-      surfaceArea -= elementWidth * elementHeight;
+      final elementArea = element.getArea(gridSize, gridRealSize);
+      surfaceArea -= elementArea;
     }
-    
+
     return surfaceArea;
   }
-  
+
   // Calculate total wall volume (excluding doors and windows)
   double getTotalWallVolume(double gridSize, double gridRealSize) {
     double totalVolume = 0;
-    
+
     // Add all wall volumes
     final wallVolumes = getAllWallVolumes(gridSize, gridRealSize);
     for (int i = 0; i < wallVolumes.length; i++) {
@@ -700,7 +765,7 @@ class Room {
         totalVolume += wallVolumes[i] / 2;
       }
     }
-    
+
     return totalVolume;
   }
 }

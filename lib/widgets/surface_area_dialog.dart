@@ -25,6 +25,16 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
+    // Debug: print all stats received
+    print('STATS RECEIVED IN DIALOG:');
+    widget.stats.forEach((key, value) {
+      if (key != 'roomStats') {
+        print('$key: $value');
+      } else {
+        print('roomStats: ${(value as List).length} rooms');
+      }
+    });
   }
   
   @override
@@ -38,8 +48,8 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
     return AlertDialog(
       title: const Text("Surface Area Information"),
       content: SizedBox(
-        width: 450, // Reduced from 600
-        height: 400, // Reduced from 500
+        width: 600,
+        height: 500,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,10 +75,10 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
               ),
             ),
             
-            const SizedBox(height: 8), // Reduced from 16
+            const SizedBox(height: 16),
             const Text(
               "Note: Accounts for doors, windows, and shared walls.",
-              style: TextStyle(fontStyle: FontStyle.italic, fontSize: 10), // Reduced from 12
+              style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
             ),
           ],
         ),
@@ -85,13 +95,13 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
   Widget _buildSummaryTab() {
     return SingleChildScrollView(
       child: Padding(
-        padding: const EdgeInsets.all(8.0), // Reduced from 16
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Floor area section
             _buildSectionTitle("Floor Surfaces", Icons.grid_on),
-            const SizedBox(height: 4), // Reduced from 8
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -101,7 +111,7 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
                     color: Colors.amber.shade100,
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _buildAreaCard(
                     title: "Ceiling Area",
@@ -112,9 +122,9 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
               ],
             ),
             
-            const SizedBox(height: 8), // Reduced from 16
+            const SizedBox(height: 16),
             _buildSectionTitle("Wall Surfaces", Icons.house),
-            const SizedBox(height: 4), // Reduced from 8
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -124,7 +134,7 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
                     color: Colors.blue.shade100,
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _buildAreaCard(
                     title: "External Walls",
@@ -135,9 +145,9 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
               ],
             ),
             
-            const SizedBox(height: 8), // Reduced from 16
+            const SizedBox(height: 16),
             _buildSectionTitle("Openings", Icons.door_back_door_outlined),
-            const SizedBox(height: 4), // Reduced from 8
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -147,7 +157,7 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
                     color: Colors.brown.shade100,
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _buildAreaCard(
                     title: "Window Area",
@@ -158,7 +168,7 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
               ],
             ),
             
-            const SizedBox(height: 12), // Reduced from 24
+            const SizedBox(height: 24),
             _buildTotalCard(
               title: "TOTAL SURFACE AREA",
               value: widget.stats['totalSurfaceArea'] ?? 0,
@@ -178,7 +188,7 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
         child: Text(
           "No rooms to display",
           style: TextStyle(
-            fontSize: 16, // Reduced from 18
+            fontSize: 18,
             fontStyle: FontStyle.italic,
             color: Colors.grey,
           ),
@@ -197,20 +207,19 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
 
   Widget _buildRoomCard(Map<String, dynamic> roomData) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8), // More compact
-      elevation: 1, // Reduced from 2
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      elevation: 2,
       child: ExpansionTile(
         title: Text(
           roomData['name'] ?? 'Unnamed Room',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), // Reduced from default
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
           'Floor: ${MeasurementUtils.formatArea(roomData['floorArea'] ?? 0, widget.unit)}',
-          style: const TextStyle(fontSize: 12), // Reduced from default
         ),
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), // Reduced vertical
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -220,7 +229,7 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
                 _buildRoomStatRow("External Wall Area", roomData['externalWallArea'] ?? 0),
                 _buildRoomStatRow("Door Area", roomData['doorArea'] ?? 0),
                 _buildRoomStatRow("Window Area", roomData['windowArea'] ?? 0),
-                const Divider(height: 12), // More compact
+                const Divider(height: 16),
                 _buildRoomStatRow(
                   "Total Wall Area", 
                   (roomData['internalWallArea'] ?? 0) + (roomData['externalWallArea'] ?? 0),
@@ -234,12 +243,12 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
                   (roomData['externalWallArea'] ?? 0),
                   isBold: true
                 ),
-                const SizedBox(height: 4), // Reduced from 8
+                const SizedBox(height: 8),
                 Text(
                   "Elements: ${roomData['elements']} (Doors and Windows)",
                   style: const TextStyle(
                     fontStyle: FontStyle.italic,
-                    fontSize: 10, // Reduced from 12
+                    fontSize: 12,
                     color: Colors.grey,
                   ),
                 ),
@@ -253,7 +262,7 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
 
   Widget _buildRoomStatRow(String label, double value, {bool isBold = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2), // Reduced from 4
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -261,14 +270,12 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
             label,
             style: TextStyle(
               fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              fontSize: 12, // Added smaller font
             ),
           ),
           Text(
             MeasurementUtils.formatArea(value, widget.unit),
             style: TextStyle(
               fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              fontSize: 12, // Added smaller font
             ),
           ),
         ],
@@ -279,12 +286,12 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
   Widget _buildSectionTitle(String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey[700]), // Reduced from 20
-        const SizedBox(width: 4), // Reduced from 8
+        Icon(icon, size: 20, color: Colors.grey[700]),
+        const SizedBox(width: 8),
         Text(
           title,
           style: TextStyle(
-            fontSize: 14, // Reduced from 16
+            fontSize: 16,
             fontWeight: FontWeight.bold,
             color: Colors.grey[800],
           ),
@@ -299,14 +306,14 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(8), // Reduced from 12
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(6), // Reduced from 8
+        borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 1, // Reduced from 2
+            blurRadius: 2,
             offset: const Offset(0, 1),
           ),
         ],
@@ -318,13 +325,14 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
             title,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 12, // Reduced from 16
+              fontSize: 14,
             ),
           ),
+          const SizedBox(height: 4),
           Text(
             MeasurementUtils.formatArea(value, widget.unit),
             style: const TextStyle(
-              fontSize: 14, // Reduced from 20
+              fontSize: 18,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -339,15 +347,15 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(10), // Reduced from 16
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(6), // Reduced from 8
+        borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
-            blurRadius: 2, // Reduced from 3
-            offset: const Offset(0, 1), // Reduced from (0, 2)
+            blurRadius: 3,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -358,13 +366,13 @@ class _SurfaceAreaInfoDialogState extends State<SurfaceAreaInfoDialog> with Sing
             title,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 14, // Reduced from 16
+              fontSize: 16,
             ),
           ),
           Text(
             MeasurementUtils.formatArea(value, widget.unit),
             style: const TextStyle(
-              fontSize: 16, // Reduced from 20
+              fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
           ),

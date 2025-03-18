@@ -1,6 +1,4 @@
 // lib/screens/floor_plan_editor.dart
-// Here is the complete updated file with all the fixes integrated
-
 import 'package:flutter/material.dart';
 import '../models/room.dart';
 import '../models/element.dart';
@@ -404,6 +402,34 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   }
 
   Map<String, dynamic> _calculateSurfaceAreaStats() {
+    // Debug output
+    print('==== CALCULATING SURFACE AREA STATS ====');
+    print('Number of rooms: ${rooms.length}');
+
+    // For each room, print shared walls info
+    for (int i = 0; i < rooms.length; i++) {
+      final room = rooms[i];
+      print('Room ${room.name} has ${room.sharedWalls.length} shared walls:');
+      for (var connection in room.sharedWalls) {
+        print(
+            '  With ${connection.$1.name}, wall ${connection.$2} connects to wall ${connection.$3}');
+      }
+    }
+
+    // First update shared walls to ensure they're detected properly
+    _updateSharedWalls();
+
+    // After update, print shared walls info again
+    print('==== SHARED WALLS AFTER UPDATE ====');
+    for (int i = 0; i < rooms.length; i++) {
+      final room = rooms[i];
+      print('Room ${room.name} has ${room.sharedWalls.length} shared walls:');
+      for (var connection in room.sharedWalls) {
+        print(
+            '  With ${connection.$1.name}, wall ${connection.$2} connects to wall ${connection.$3}');
+      }
+    }
+
     // Room-wise statistics
     List<Map<String, dynamic>> roomStats = [];
 
@@ -415,8 +441,8 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     double totalDoorArea = 0;
     double totalWindowArea = 0;
 
-    // Track shared walls to avoid double counting
-    Set<String> processedWalls = {};
+    // Track processed walls to avoid double counting
+    Set<String> processedSharedWalls = {};
 
     // Calculate statistics for each room
     for (var room in rooms) {
@@ -433,7 +459,6 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       // Calculate wall areas and lengths
       final wallSegments = room.getWallSegments();
       final wallAreas = room.getAllWallAreas(gridSize, gridRealSize);
-      final wallLengths = room.getWallRealLengths(gridSize, gridRealSize);
 
       // Initialize wall-specific stats to track openings
       List<double> wallOpeningAreas = List.filled(4, 0.0);
@@ -449,7 +474,6 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           // Find which wall this element belongs to
           for (int wallIndex = 0; wallIndex < 4; wallIndex++) {
             final wall = wallSegments[wallIndex];
-
             if (_isElementOnWall(element, wall)) {
               wallOpeningAreas[wallIndex] += elementArea;
               break;
@@ -462,7 +486,6 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           // Find which wall this element belongs to
           for (int wallIndex = 0; wallIndex < 4; wallIndex++) {
             final wall = wallSegments[wallIndex];
-
             if (_isElementOnWall(element, wall)) {
               wallOpeningAreas[wallIndex] += elementArea;
               break;
@@ -472,56 +495,69 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       }
 
       // Process each wall
-      for (int i = 0; i < wallAreas.length; i++) {
-        bool isShared = room.isWallShared(i);
-        double effectiveWallArea = wallAreas[i] - wallOpeningAreas[i];
-
+      for (int wallIndex = 0; wallIndex < wallSegments.length; wallIndex++) {
+        // Calculate effective wall area (wall area minus openings)
+        double effectiveWallArea =
+            wallAreas[wallIndex] - wallOpeningAreas[wallIndex];
         if (effectiveWallArea < 0)
           effectiveWallArea = 0; // Prevent negative areas
 
-        if (isShared) {
-          // Generate a unique identifier for this wall pair
-          List<String> sharedWallIds = [];
+        // Check if this wall is shared with another room
+        bool isSharedWall = room.isWallShared(wallIndex);
+
+        print(
+            'Room ${room.name}, Wall $wallIndex: isShared=$isSharedWall, Area=$effectiveWallArea');
+
+        if (isSharedWall) {
+          // This is a shared (internal) wall
+          // Find all connections for this wall
+          bool counted = false;
 
           for (var connection in room.sharedWalls) {
-            if (connection.$2 == i) {
+            if (connection.$2 == wallIndex) {
+              // If this is the wall we're processing
               final otherRoom = connection.$1;
               final otherWallIndex = connection.$3;
+
+              // Create unique identifier for this shared wall pair
               final wallId1 =
-                  '${room.name}-$i-${otherRoom.name}-$otherWallIndex';
+                  '${room.name}-$wallIndex-${otherRoom.name}-$otherWallIndex';
               final wallId2 =
-                  '${otherRoom.name}-$otherWallIndex-${room.name}-$i';
+                  '${otherRoom.name}-$otherWallIndex-${room.name}-$wallIndex';
 
-              if (!processedWalls.contains(wallId1) &&
-                  !processedWalls.contains(wallId2)) {
-                sharedWallIds.add(wallId1);
-                processedWalls.add(wallId1);
+              print('  Checking shared wall: $wallId1');
 
-                // Add to internal wall area
+              // Only count as internal if not processed yet
+              if (!processedSharedWalls.contains(wallId1) &&
+                  !processedSharedWalls.contains(wallId2)) {
+                processedSharedWalls.add(wallId1);
+
+                // Add to room's internal wall area
                 roomInternalWallArea += effectiveWallArea;
+
+                // Add to global internal wall area
                 totalInternalWallArea += effectiveWallArea;
 
-                // Debug output
-                print(
-                    'Added internal wall: ${room.name}, wall $i, area: $effectiveWallArea');
+                counted = true;
+                print('  Added as internal wall: area=$effectiveWallArea');
+                break;
+              } else {
+                print('  Already processed, skipping');
               }
             }
           }
 
-          // If this shared wall wasn't processed (unusual case), treat as external
-          if (sharedWallIds.isEmpty) {
-            roomExternalWallArea += effectiveWallArea;
-            totalExternalWallArea += effectiveWallArea;
-            print('WARNING: Shared wall not processed: ${room.name}, wall $i');
+          // If this shared wall wasn't counted globally (to avoid double counting)
+          // but we still need to count it for the room stats
+          if (!counted) {
+            roomInternalWallArea += effectiveWallArea;
+            print('  Added to room internal area only');
           }
         } else {
-          // External wall
+          // This is an external wall
           roomExternalWallArea += effectiveWallArea;
           totalExternalWallArea += effectiveWallArea;
-
-          // Debug output
-          print(
-              'Added external wall: ${room.name}, wall $i, area: $effectiveWallArea');
+          print('  Added as external wall');
         }
       }
 
@@ -582,7 +618,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     };
   }
 
-// Helper method to determine if an element is on a wall
+  // Helper method to determine if an element is on a wall - improved version
   bool _isElementOnWall(ArchitecturalElement element, (Offset, Offset) wall) {
     // Get element direction vector (perpendicular to wall it's attached to)
     final elementDirection =
@@ -622,8 +658,9 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         projectionOnWall >= 0 && projectionOnWall <= wallLength;
 
     return isPerpendicular && isCloseEnough && isWithinWall;
-  } // New method to show the surface area information dialog
+  }
 
+  // Show the surface area information dialog
   void _showSurfaceAreaInfo() {
     final stats = _calculateSurfaceAreaStats();
 
@@ -1179,9 +1216,11 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     _updateSharedWalls();
   }
 
-  // Update shared wall connections for all rooms
+  // Update shared wall connections for all rooms - improved version
   void _updateSharedWalls() {
-    // First, clear all shared wall connections
+    print('====== UPDATING SHARED WALLS ======');
+
+    // Clear all existing shared wall connections
     for (var room in rooms) {
       room.clearSharedWalls();
     }
@@ -1192,20 +1231,36 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         final room1 = rooms[i];
         final room2 = rooms[j];
 
+        print('Checking rooms: ${room1.name} and ${room2.name}');
+
         final walls1 = room1.getWallSegments();
         final walls2 = room2.getWallSegments();
 
         // Check all wall pairs
         for (int w1 = 0; w1 < walls1.length; w1++) {
           for (int w2 = 0; w2 < walls2.length; w2++) {
-            // Use the improved overlap detection with higher tolerance
-            if (Room.doWallsOverlap(walls1[w1], walls2[w2], 5.0)) {
-              // Mark walls as shared
+            // Use a very small tolerance (1.0 pixel) for precise detection
+            if (Room.doWallsOverlap(walls1[w1], walls2[w2], 1.0)) {
+              // Add shared wall connections
               room1.addSharedWall(room2, w1, w2);
 
-              // Debug output to console
               print(
-                  'Shared wall detected between ${room1.name} (wall $w1) and ${room2.name} (wall $w2)');
+                  '  ✓ Shared wall detected: ${room1.name} wall $w1 with ${room2.name} wall $w2');
+
+              // Calculate the overlap length for debugging
+              final overlapLength =
+                  Room.getWallsOverlapLength(walls1[w1], walls2[w2]);
+              print('    Overlap length: $overlapLength');
+
+              // Print the actual wall coordinates
+              print(
+                  '    Wall 1: (${walls1[w1].$1.dx}, ${walls1[w1].$1.dy}) - (${walls1[w1].$2.dx}, ${walls1[w1].$2.dy})');
+              print(
+                  '    Wall 2: (${walls2[w2].$1.dx}, ${walls2[w2].$1.dy}) - (${walls2[w2].$2.dx}, ${walls2[w2].$2.dy})');
+            } else {
+              // For debugging: print all wall pairs that were checked but did not match
+              print(
+                  '  ✗ No overlap: ${room1.name} wall $w1 and ${room2.name} wall $w2');
             }
           }
         }
@@ -1287,8 +1342,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
             onAddRoom: _addNewRoom,
             onRenameProject: _renameProject,
             onOpenSettings: _openSettings,
-            onShowSurfaceAreaInfo:
-                _showSurfaceAreaInfo, // Add this new callback
+            onShowSurfaceAreaInfo: _showSurfaceAreaInfo,
           ),
 
           // Main Content
