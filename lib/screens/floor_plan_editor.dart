@@ -1,3 +1,6 @@
+// lib/screens/floor_plan_editor.dart
+// Here is the complete updated file with all the fixes integrated
+
 import 'package:flutter/material.dart';
 import '../models/room.dart';
 import '../models/element.dart';
@@ -6,6 +9,7 @@ import '../painters/floor_plan_painter.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/properties_panel.dart';
 import '../widgets/status_bar.dart';
+import '../widgets/surface_area_dialog.dart';
 import '../utils/measurement_utils.dart';
 import 'dart:math' as math;
 
@@ -14,12 +18,16 @@ class FloorPlanEditor extends StatefulWidget {
 
   @override
   FloorPlanEditorState createState() => FloorPlanEditorState();
+
+  static State<FloorPlanEditor> of(BuildContext context) {
+    return context.findAncestorStateOfType<FloorPlanEditorState>()!;
+  }
 }
 
 class FloorPlanEditorState extends State<FloorPlanEditor> {
   // Lists for storing floor plan data
   final List<Room> rooms = [];
-  
+
   // Editor mode and states
   EditorMode mode = EditorMode.select;
   Room? selectedRoom;
@@ -27,44 +35,44 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   String projectName = "Untitled Project";
   bool showGrid = true;
   bool showMeasurements = true;
-  
+
   // Grid and measurement settings
   double gridSize = 20.0; // Fixed grid size
   double gridRealSize = 1.0;
   MeasurementUnit unit = MeasurementUnit.feet;
-  
+
   // Default wall height for new rooms
   double defaultWallHeight = 8.0; // Default in feet
-  
+
   // Panel states
   bool showRightPanel = false;
-  
+
   // Canvas state
   final transformationController = TransformationController();
   Offset? lastGlobalPosition;
   bool isCanvasDragging = false;
-  
+
   // Interaction state flags
   bool isDraggingAnyObject = false;
-  
+
   // Snapping
   double snapDistance = 25.0; // Universal snap distance for all snap types
   bool enableGridSnap = false; // Always use intelligent snapping
-  
+
   // Snap type tracking
   SnapType currentSnapType = SnapType.none;
-  
+
   // Room counter
   int roomCounter = 1;
-  
+
   // Wall thickness
   double wallThickness = 4.0;
-  
+
   // Current snap information
   Room? targetSnapRoom;
   int? sourceWallIndex;
   int? targetWallIndex;
-  
+
   // Colors
   final List<Color> roomColors = [
     const Color(0xFFD8E5CE), // Light green
@@ -91,23 +99,19 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   void _addNewRoom() {
     // Default position in the center of the view
     var position = const Offset(500, 400);
-    
+
     // If there are existing rooms, offset to the right
     if (rooms.isNotEmpty) {
       final maxX = rooms.fold<double>(
-        0,
-        (max, room) => math.max(max, room.position.dx + room.width / 2)
-      );
+          0, (max, room) => math.max(max, room.position.dx + room.width / 2));
       // Position new room to the right of existing rooms with some margin
       position = Offset(maxX + 120, position.dy);
     }
-    
+
     // Create walls with default height
-    List<Wall> walls = List.generate(
-      4, 
-      (_) => Wall(height: defaultWallHeight, breadth: 0.5)
-    );
-    
+    List<Wall> walls =
+        List.generate(4, (_) => Wall(height: defaultWallHeight, breadth: 0.5));
+
     // Create new room
     final newRoom = Room(
       name: 'Room ${roomCounter++}',
@@ -117,33 +121,33 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       height: 150,
       walls: walls,
     );
-    
+
     setState(() {
       // Deselect all existing rooms
       _clearAllSelections();
-      
+
       // Add and select new room
       rooms.add(newRoom);
       _selectRoom(newRoom);
       showRightPanel = true;
     });
   }
-  
+
   void _deleteRoom(Room room) {
     setState(() {
       // Clear shared wall connections
       room.clearSharedWalls();
-      
+
       // Remove room
       rooms.remove(room);
-      
+
       if (selectedRoom == room) {
         selectedRoom = null;
         showRightPanel = false;
       }
     });
   }
-  
+
   void _deleteSelected() {
     if (selectedRoom != null) {
       _deleteRoom(selectedRoom!);
@@ -166,33 +170,33 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     setState(() {
       // Clear previous selections
       _clearAllSelections();
-      
+
       // Select the new room
       room.selected = true;
       selectedRoom = room;
       showRightPanel = true;
     });
   }
-  
+
   void _selectElement(ArchitecturalElement element) {
     setState(() {
       // Clear previous selections
       _clearAllSelections();
-      
+
       // Select the new element
       element.isSelected = true;
       selectedElement = element;
       showRightPanel = true;
     });
   }
-  
+
   void _clearAllSelections() {
     // Clear room selections
     for (var room in rooms) {
       room.selected = false;
     }
     selectedRoom = null;
-    
+
     // Clear element selections
     for (var room in rooms) {
       for (var element in room.elements) {
@@ -201,128 +205,135 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     }
     selectedElement = null;
   }
-  
+
   void _handleRoomWidthChange(Room room, double newWidth) {
     setState(() {
       room.width = newWidth;
       _updateSharedWallsAfterRoomChange(room);
     });
   }
-  
+
   void _handleRoomHeightChange(Room room, double newHeight) {
     setState(() {
       room.height = newHeight;
       _updateSharedWallsAfterRoomChange(room);
     });
   }
-  
+
   void _handleRoomColorChange(Room room, Color newColor) {
     setState(() {
       room.color = newColor;
     });
   }
-  
+
   void _handleRoomNameChange(Room room, String newName) {
     setState(() {
       room.name = newName;
     });
   }
-  
+
   void _handleElementNameChange(ArchitecturalElement element, String newName) {
     setState(() {
       element.name = newName;
     });
   }
-  
-  void _handleElementWidthChange(ArchitecturalElement element, double newWidth) {
+
+  void _handleElementWidthChange(
+      ArchitecturalElement element, double newWidth) {
     setState(() {
       element.width = newWidth;
     });
   }
-  
-  void _handleElementHeightChange(ArchitecturalElement element, double newHeight) {
+
+  void _handleElementHeightChange(
+      ArchitecturalElement element, double newHeight) {
     setState(() {
       element.height = newHeight;
     });
   }
-  
-  void _handleElementWallHeightChange(ArchitecturalElement element, double newWallHeight) {
+
+  void _handleElementWallHeightChange(
+      ArchitecturalElement element, double newWallHeight) {
     setState(() {
       element.wallHeight = newWallHeight;
     });
   }
-  
-  void _handleElementRotationChange(ArchitecturalElement element, double newRotation) {
+
+  void _handleElementRotationChange(
+      ArchitecturalElement element, double newRotation) {
     setState(() {
       element.rotation = newRotation;
     });
   }
-  
+
   void _handleModeChange(EditorMode newMode) {
     setState(() {
       mode = newMode;
     });
   }
-  
+
   void _handleRightPanelToggle() {
     setState(() {
       showRightPanel = !showRightPanel;
     });
   }
-  
+
   void _handleGridRealSizeChange(double newSize) {
     setState(() {
       gridRealSize = newSize;
     });
   }
-  
+
   void _handleUnitChange(MeasurementUnit newUnit) {
     setState(() {
       // Calculate conversion factor
-      final conversionFactor = newUnit.conversionFromMeters / unit.conversionFromMeters;
-      
+      final conversionFactor =
+          newUnit.conversionFromMeters / unit.conversionFromMeters;
+
       // Update default wall height
-      defaultWallHeight = MeasurementUtils.convertBetweenUnits(defaultWallHeight, unit, newUnit);
-      
+      defaultWallHeight = MeasurementUtils.convertBetweenUnits(
+          defaultWallHeight, unit, newUnit);
+
       // Update grid real size
-      gridRealSize = MeasurementUtils.convertBetweenUnits(gridRealSize, unit, newUnit);
-      
+      gridRealSize =
+          MeasurementUtils.convertBetweenUnits(gridRealSize, unit, newUnit);
+
       // Update unit
       unit = newUnit;
     });
   }
-  
+
   void _handleDefaultWallHeightChange(double newHeight) {
     setState(() {
       defaultWallHeight = newHeight;
     });
   }
-  
+
   void _handleGridToggle() {
     setState(() {
       showGrid = !showGrid;
     });
   }
-  
+
   void _handleMeasurementsToggle() {
     setState(() {
       showMeasurements = !showMeasurements;
     });
   }
-  
+
   void _handleZoom(double scaleFactor) {
     final matrix = transformationController.value.clone();
     matrix.scale(scaleFactor);
     transformationController.value = matrix;
   }
-  
+
   void _resetView() {
     transformationController.value = Matrix4.identity();
   }
-  
+
   void _renameProject() {
     final controller = TextEditingController(text: projectName);
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -343,8 +354,8 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           ElevatedButton(
             onPressed: () {
               setState(() {
-                projectName = controller.text.isNotEmpty 
-                    ? controller.text 
+                projectName = controller.text.isNotEmpty
+                    ? controller.text
                     : "Untitled Project";
               });
               Navigator.pop(context);
@@ -355,23 +366,23 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       ),
     );
   }
-  
+
   // Calculate project statistics
   Map<String, dynamic> _calculateProjectStats() {
     // Calculate total areas and volumes
     final totalSurfaceArea = MeasurementUtils.calculateTotalSurfaceArea(
-      rooms, gridSize, gridRealSize);
-    
+        rooms, gridSize, gridRealSize);
+
     final totalWallVolume = MeasurementUtils.calculateTotalWallVolume(
-      rooms, gridSize, gridRealSize);
-    
+        rooms, gridSize, gridRealSize);
+
     final totalRoomVolume = MeasurementUtils.calculateTotalRoomVolume(
-      rooms, gridSize, gridRealSize);
-    
+        rooms, gridSize, gridRealSize);
+
     // Count all elements
     int doorCount = 0;
     int windowCount = 0;
-    
+
     for (var room in rooms) {
       for (var element in room.elements) {
         if (element.type == ElementType.door) {
@@ -381,7 +392,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         }
       }
     }
-    
+
     return {
       'roomCount': rooms.length,
       'doorCount': doorCount,
@@ -391,7 +402,266 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       'totalRoomVolume': totalRoomVolume,
     };
   }
-  
+
+  Map<String, dynamic> _calculateSurfaceAreaStats() {
+    // Room-wise statistics
+    List<Map<String, dynamic>> roomStats = [];
+
+    // Project totals
+    double totalFloorArea = 0;
+    double totalCeilingArea = 0;
+    double totalInternalWallArea = 0;
+    double totalExternalWallArea = 0;
+    double totalDoorArea = 0;
+    double totalWindowArea = 0;
+
+    // Track shared walls to avoid double counting
+    Set<String> processedWalls = {};
+
+    // Calculate statistics for each room
+    for (var room in rooms) {
+      // Room dimensions
+      final roomFloorArea = room.getArea(gridSize, gridRealSize);
+      final roomCeilingArea = roomFloorArea; // Ceiling area equals floor area
+
+      // Initialize room-specific stats
+      double roomInternalWallArea = 0;
+      double roomExternalWallArea = 0;
+      double roomDoorArea = 0;
+      double roomWindowArea = 0;
+
+      // Calculate wall areas and lengths
+      final wallSegments = room.getWallSegments();
+      final wallAreas = room.getAllWallAreas(gridSize, gridRealSize);
+      final wallLengths = room.getWallRealLengths(gridSize, gridRealSize);
+
+      // Initialize wall-specific stats to track openings
+      List<double> wallOpeningAreas = List.filled(4, 0.0);
+
+      // Calculate doors and windows areas for this room
+      for (var element in room.elements) {
+        final elementArea = element.getArea(gridSize, gridRealSize);
+
+        if (element.type == ElementType.door) {
+          roomDoorArea += elementArea;
+          totalDoorArea += elementArea;
+
+          // Find which wall this element belongs to
+          for (int wallIndex = 0; wallIndex < 4; wallIndex++) {
+            final wall = wallSegments[wallIndex];
+
+            if (_isElementOnWall(element, wall)) {
+              wallOpeningAreas[wallIndex] += elementArea;
+              break;
+            }
+          }
+        } else if (element.type == ElementType.window) {
+          roomWindowArea += elementArea;
+          totalWindowArea += elementArea;
+
+          // Find which wall this element belongs to
+          for (int wallIndex = 0; wallIndex < 4; wallIndex++) {
+            final wall = wallSegments[wallIndex];
+
+            if (_isElementOnWall(element, wall)) {
+              wallOpeningAreas[wallIndex] += elementArea;
+              break;
+            }
+          }
+        }
+      }
+
+      // Process each wall
+      for (int i = 0; i < wallAreas.length; i++) {
+        bool isShared = room.isWallShared(i);
+        double effectiveWallArea = wallAreas[i] - wallOpeningAreas[i];
+
+        if (effectiveWallArea < 0)
+          effectiveWallArea = 0; // Prevent negative areas
+
+        if (isShared) {
+          // Generate a unique identifier for this wall pair
+          List<String> sharedWallIds = [];
+
+          for (var connection in room.sharedWalls) {
+            if (connection.$2 == i) {
+              final otherRoom = connection.$1;
+              final otherWallIndex = connection.$3;
+              final wallId1 =
+                  '${room.name}-$i-${otherRoom.name}-$otherWallIndex';
+              final wallId2 =
+                  '${otherRoom.name}-$otherWallIndex-${room.name}-$i';
+
+              if (!processedWalls.contains(wallId1) &&
+                  !processedWalls.contains(wallId2)) {
+                sharedWallIds.add(wallId1);
+                processedWalls.add(wallId1);
+
+                // Add to internal wall area
+                roomInternalWallArea += effectiveWallArea;
+                totalInternalWallArea += effectiveWallArea;
+
+                // Debug output
+                print(
+                    'Added internal wall: ${room.name}, wall $i, area: $effectiveWallArea');
+              }
+            }
+          }
+
+          // If this shared wall wasn't processed (unusual case), treat as external
+          if (sharedWallIds.isEmpty) {
+            roomExternalWallArea += effectiveWallArea;
+            totalExternalWallArea += effectiveWallArea;
+            print('WARNING: Shared wall not processed: ${room.name}, wall $i');
+          }
+        } else {
+          // External wall
+          roomExternalWallArea += effectiveWallArea;
+          totalExternalWallArea += effectiveWallArea;
+
+          // Debug output
+          print(
+              'Added external wall: ${room.name}, wall $i, area: $effectiveWallArea');
+        }
+      }
+
+      // Update global floor/ceiling totals
+      totalFloorArea += roomFloorArea;
+      totalCeilingArea += roomCeilingArea;
+
+      // Compile room stats
+      roomStats.add({
+        'name': room.name,
+        'floorArea': roomFloorArea,
+        'ceilingArea': roomCeilingArea,
+        'internalWallArea': roomInternalWallArea,
+        'externalWallArea': roomExternalWallArea,
+        'totalWallArea': roomInternalWallArea + roomExternalWallArea,
+        'doorArea': roomDoorArea,
+        'windowArea': roomWindowArea,
+        'elements': room.elements.length,
+      });
+
+      // Debug output
+      print('Room stats for ${room.name}:');
+      print('  Floor area: $roomFloorArea');
+      print('  Internal wall area: $roomInternalWallArea');
+      print('  External wall area: $roomExternalWallArea');
+      print('  Door area: $roomDoorArea');
+      print('  Window area: $roomWindowArea');
+    }
+
+    // Calculate total surface area (minus openings)
+    double totalWallArea = totalInternalWallArea + totalExternalWallArea;
+    double totalSurfaceArea = totalFloorArea + totalCeilingArea + totalWallArea;
+
+    // Debug output
+    print('TOTAL STATS:');
+    print('  Floor area: $totalFloorArea');
+    print('  Ceiling area: $totalCeilingArea');
+    print('  Internal wall area: $totalInternalWallArea');
+    print('  External wall area: $totalExternalWallArea');
+    print('  Door area: $totalDoorArea');
+    print('  Window area: $totalWindowArea');
+    print('  TOTAL SURFACE AREA: $totalSurfaceArea');
+
+    // Return comprehensive stats
+    return {
+      // Total areas
+      'floorArea': totalFloorArea,
+      'ceilingArea': totalCeilingArea,
+      'internalWallArea': totalInternalWallArea,
+      'externalWallArea': totalExternalWallArea,
+      'totalWallArea': totalWallArea,
+      'doorArea': totalDoorArea,
+      'windowArea': totalWindowArea,
+      'totalSurfaceArea': totalSurfaceArea,
+
+      // Room-wise breakdown
+      'roomStats': roomStats,
+    };
+  }
+
+// Helper method to determine if an element is on a wall
+  bool _isElementOnWall(ArchitecturalElement element, (Offset, Offset) wall) {
+    // Get element direction vector (perpendicular to wall it's attached to)
+    final elementDirection =
+        Offset(math.cos(element.rotation), math.sin(element.rotation));
+
+    // Get wall direction vector
+    final wallVector = wall.$2 - wall.$1;
+    final wallLength = wallVector.distance;
+    if (wallLength < 0.001) return false;
+
+    final wallDirection =
+        Offset(wallVector.dx / wallLength, wallVector.dy / wallLength);
+
+    // Calculate perpendicular wall direction
+    final perpWallDirection = Offset(-wallDirection.dy, wallDirection.dx);
+
+    // Check if element is perpendicular to wall (dot product close to 0)
+    final dot = elementDirection.dx * wallDirection.dx +
+        elementDirection.dy * wallDirection.dy;
+    final perpDot = elementDirection.dx * perpWallDirection.dx +
+        elementDirection.dy * perpWallDirection.dy;
+
+    // Element is likely perpendicular to wall if dot is close to 0 and perp dot is close to 1 or -1
+    final isPerpendicular = dot.abs() < 0.3 && perpDot.abs() > 0.7;
+
+    // Calculate distance from element center to wall
+    final distanceToWall = Room.distanceToWall(element.position, wall);
+
+    // Check if element is close enough to wall
+    final isCloseEnough = distanceToWall < element.height;
+
+    // Project element position onto wall to check if it's within wall length
+    final wallToElement = element.position - wall.$1;
+    final projectionOnWall = wallToElement.dx * wallDirection.dx +
+        wallToElement.dy * wallDirection.dy;
+    final isWithinWall =
+        projectionOnWall >= 0 && projectionOnWall <= wallLength;
+
+    return isPerpendicular && isCloseEnough && isWithinWall;
+  } // New method to show the surface area information dialog
+
+  void _showSurfaceAreaInfo() {
+    final stats = _calculateSurfaceAreaStats();
+
+    showDialog(
+      context: context,
+      builder: (context) => SurfaceAreaInfoDialog(
+        stats: stats,
+        unit: unit,
+      ),
+    );
+  }
+
+  // Method for handling wall property changes
+  void _handleWallPropertyChange(
+      Room room, int wallIndex, String property, double value) {
+    setState(() {
+      if (property == 'height') {
+        room.walls[wallIndex].height = value;
+      } else if (property == 'breadth') {
+        room.walls[wallIndex].breadth = value;
+      }
+
+      // If this wall is shared, update the connected walls too
+      for (var connection in room.sharedWalls) {
+        if (connection.$2 == wallIndex) {
+          final otherRoom = connection.$1;
+          final otherWallIndex = connection.$3;
+
+          if (property == 'height') {
+            otherRoom.walls[otherWallIndex].height = value;
+          } else if (property == 'breadth') {
+            otherRoom.walls[otherWallIndex].breadth = value;
+          }
+        }
+      }
+    });
+  }
+
   void _openSettings() {
     showDialog(
       context: context,
@@ -433,7 +703,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
 
   void _handlePointerDown(PointerDownEvent event) {
     final point = _transformPoint(event.localPosition);
-    
+
     if (mode == EditorMode.select) {
       // Try to find element under pointer
       ArchitecturalElement? element = _findElementAt(point);
@@ -445,7 +715,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         });
         return;
       }
-      
+
       // Try to find room
       Room? room = _findRoomAt(point);
       if (room != null) {
@@ -453,7 +723,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           isDraggingAnyObject = true;
           room.startDrag(point);
           _selectRoom(room);
-          
+
           // Reset snap tracking
           currentSnapType = SnapType.none;
           targetSnapRoom = null;
@@ -462,58 +732,46 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         });
         return;
       }
-      
+
       // Nothing found, start canvas drag or clear selection
-      if (event.buttons == 1) { // Primary button (left click)
+      if (event.buttons == 1) {
+        // Primary button (left click)
         setState(() {
           _clearAllSelections();
           showRightPanel = false;
         });
-      } else if (event.buttons == 4) { // Middle button
+      } else if (event.buttons == 4) {
+        // Middle button
         // Start canvas dragging
         isCanvasDragging = true;
         lastGlobalPosition = event.position;
       }
-    }
-    else if (mode == EditorMode.door || mode == EditorMode.window) {
+    } else if (mode == EditorMode.door || mode == EditorMode.window) {
       // Try to find any wall to place element on
       final wallResult = Room.findClosestWallPoint(point, rooms, snapDistance);
-      
+
       if (wallResult != null) {
         final snapPoint = wallResult.$1;
         final wall = wallResult.$3;
         final room = wallResult.$4;
-        
-        _addElementToWall(
-          room,
-          snapPoint,
-          wall,
-          mode == EditorMode.door 
-              ? ElementType.door 
-              : ElementType.window
-        );
+
+        _addElementToWall(room, snapPoint, wall,
+            mode == EditorMode.door ? ElementType.door : ElementType.window);
         return;
       }
-      
+
       // Try to find any corner to place element at
       final cornerResult = Room.findClosestCorner(point, rooms, snapDistance);
-      
+
       if (cornerResult != null) {
         final cornerPos = cornerResult.$1;
         final cornerIndex = cornerResult.$3;
         final room = cornerResult.$4;
-        
-        _addElementToCorner(
-          room,
-          cornerPos,
-          cornerIndex,
-          mode == EditorMode.door 
-              ? ElementType.door 
-              : ElementType.window
-        );
+
+        _addElementToCorner(room, cornerPos, cornerIndex,
+            mode == EditorMode.door ? ElementType.door : ElementType.window);
       }
-    }
-    else if (mode == EditorMode.delete) {
+    } else if (mode == EditorMode.delete) {
       // Try to find element to delete
       ArchitecturalElement? element = _findElementAt(point);
       if (element != null) {
@@ -530,21 +788,18 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           }
         }
       }
-      
+
       // Try to find room to delete
       Room? room = _findRoomAt(point);
       if (room != null) {
         _deleteRoom(room);
         return;
       }
-    }
-    else if (mode == EditorMode.room) {
+    } else if (mode == EditorMode.room) {
       // Create walls with default height
       List<Wall> walls = List.generate(
-        4, 
-        (_) => Wall(height: defaultWallHeight, breadth: 0.5)
-      );
-      
+          4, (_) => Wall(height: defaultWallHeight, breadth: 0.5));
+
       // Create new room at the pointer position
       final newRoom = Room(
         name: 'Room ${roomCounter++}',
@@ -554,11 +809,11 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         height: 150,
         walls: walls,
       );
-      
+
       setState(() {
         // Deselect all existing rooms
         _clearAllSelections();
-        
+
         // Add and select new room
         rooms.add(newRoom);
         _selectRoom(newRoom);
@@ -566,43 +821,42 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       });
     }
   }
-  
+
   void _handlePointerMove(PointerMoveEvent event) {
     final point = _transformPoint(event.localPosition);
-    
+
     if (isCanvasDragging && lastGlobalPosition != null) {
       // Handle canvas dragging (panning the view)
       final delta = event.position - lastGlobalPosition!;
       final matrix = transformationController.value;
       final scale = matrix.getMaxScaleOnAxis();
-      
+
       matrix.translate(delta.dx / scale, delta.dy / scale);
       transformationController.value = matrix;
-      
+
       lastGlobalPosition = event.position;
       return;
     }
-    
+
     if (isDraggingAnyObject) {
       setState(() {
         if (selectedElement != null && selectedElement!.isDragging) {
           // Apply live dragging for elements
           selectedElement!.drag(point);
-          
+
           // Check for potential snaps during dragging (for visual feedback)
           _checkElementSnapDuringDrag(selectedElement!);
-        }
-        else if (selectedRoom != null && selectedRoom!.isDragging) {
+        } else if (selectedRoom != null && selectedRoom!.isDragging) {
           // Apply live dragging for rooms
           selectedRoom!.drag(point);
-          
+
           // Check for potential snaps during dragging (for visual feedback)
           _checkRoomSnapDuringDrag(selectedRoom!);
         }
       });
     }
   }
-  
+
   void _handlePointerUp(PointerUpEvent event) {
     // End canvas dragging
     if (isCanvasDragging) {
@@ -610,7 +864,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       lastGlobalPosition = null;
       return;
     }
-    
+
     // Handle snapping on release of dragged objects
     if (isDraggingAnyObject) {
       setState(() {
@@ -618,8 +872,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           // Apply final element snapping
           _snapElementToWall(selectedElement!);
           selectedElement!.endDrag();
-        }
-        else if (selectedRoom != null && selectedRoom!.isDragging) {
+        } else if (selectedRoom != null && selectedRoom!.isDragging) {
           // Try to snap walls
           if (_applyRoomWallSnap(selectedRoom!)) {
             // Update shared walls
@@ -631,15 +884,15 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
             sourceWallIndex = null;
             targetWallIndex = null;
           }
-          
+
           selectedRoom!.endDrag();
         }
-        
+
         isDraggingAnyObject = false;
       });
     }
   }
-  
+
   // Check and track potential room wall snaps during drag
   void _checkRoomSnapDuringDrag(Room room) {
     // Reset current snap info
@@ -647,18 +900,19 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     targetSnapRoom = null;
     sourceWallIndex = null;
     targetWallIndex = null;
-    
+
     // Get other rooms for snapping
     final otherRooms = rooms.where((r) => r != room).toList();
     if (otherRooms.isEmpty) return;
-    
+
     // Find possible wall alignments
-    final alignments = Room.findAllPossibleWallAlignments(room, otherRooms, snapDistance);
-    
+    final alignments =
+        Room.findAllPossibleWallAlignments(room, otherRooms, snapDistance);
+
     if (alignments.isNotEmpty) {
       // Use the closest alignment
       final bestAlignment = alignments.first;
-      
+
       // Update snap info
       currentSnapType = SnapType.wall;
       targetSnapRoom = bestAlignment.$2;
@@ -666,137 +920,125 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       targetWallIndex = bestAlignment.$4;
     }
   }
-  
+
   // Check element snap during drag (for visual feedback)
   void _checkElementSnapDuringDrag(ArchitecturalElement element) {
     // Try to find nearest wall
-    final wallResult = Room.findClosestWallPoint(
-      element.position, 
-      rooms, 
-      snapDistance
-    );
-    
+    final wallResult =
+        Room.findClosestWallPoint(element.position, rooms, snapDistance);
+
     if (wallResult != null) {
       currentSnapType = SnapType.wall;
       return;
     }
-    
+
     // Check for corner snap
-    final cornerResult = Room.findClosestCorner(
-      element.position, 
-      rooms, 
-      snapDistance
-    );
-    
+    final cornerResult =
+        Room.findClosestCorner(element.position, rooms, snapDistance);
+
     if (cornerResult != null) {
       currentSnapType = SnapType.corner;
       return;
     }
-    
+
     // No snap found
     currentSnapType = SnapType.none;
   }
-  
+
   // Apply wall-to-wall room snapping
   bool _applyRoomWallSnap(Room room) {
     // Get other rooms for snapping
     final otherRooms = rooms.where((r) => r != room).toList();
     if (otherRooms.isEmpty) return false;
-    
+
     // If we have tracked a potential snap during drag, use that
-    if (currentSnapType == SnapType.wall && 
-        targetSnapRoom != null && 
-        sourceWallIndex != null && 
+    if (currentSnapType == SnapType.wall &&
+        targetSnapRoom != null &&
+        sourceWallIndex != null &&
         targetWallIndex != null) {
-      
       // Get the walls
       final sourceWalls = room.getWallSegments();
       final targetWalls = targetSnapRoom!.getWallSegments();
-      
+
       final sourceWall = sourceWalls[sourceWallIndex!];
       final targetWall = targetWalls[targetWallIndex!];
-      
+
       // Calculate alignment offset
-      final alignmentOffset = Room.getWallAlignmentOffset(sourceWall, targetWall);
-      
+      final alignmentOffset =
+          Room.getWallAlignmentOffset(sourceWall, targetWall);
+
       // Apply the offset
       room.move(alignmentOffset);
-      
+
       return true;
     }
-    
+
     // If no snap was tracked during drag, find the best now
-    final alignmentResult = Room.findBestWallAlignment(room, otherRooms.first, snapDistance);
-    
+    final alignmentResult =
+        Room.findBestWallAlignment(room, otherRooms.first, snapDistance);
+
     if (alignmentResult != null) {
       // Apply the offset
       room.move(alignmentResult.$1);
-      
+
       // Update snap info
       sourceWallIndex = alignmentResult.$2;
       targetWallIndex = alignmentResult.$3;
       targetSnapRoom = otherRooms.first;
       currentSnapType = SnapType.wall;
-      
+
       return true;
     }
-    
+
     return false;
   }
-  
+
   // Snap element to the nearest wall
   bool _snapElementToWall(ArchitecturalElement element) {
     // Try to find nearest wall
-    final wallResult = Room.findClosestWallPoint(
-      element.position, 
-      rooms, 
-      snapDistance
-    );
-    
+    final wallResult =
+        Room.findClosestWallPoint(element.position, rooms, snapDistance);
+
     if (wallResult != null) {
       final snapPoint = wallResult.$1;
       final wall = wallResult.$3;
       final room = wallResult.$4;
-      
+
       // Calculate wall angle
       final wallVector = wall.$2 - wall.$1;
       final wallAngle = math.atan2(wallVector.dy, wallVector.dx);
-      
+
       // Set position and rotation
       element.position = snapPoint;
-      
+
       // Perpendicular to wall
       element.rotation = wallAngle + math.pi / 2;
-      
+
       // Adjust position slightly away from wall
       final perpOffset = element.height / 2;
       element.position = Offset(
-        snapPoint.dx + math.cos(element.rotation) * perpOffset,
-        snapPoint.dy + math.sin(element.rotation) * perpOffset
-      );
-      
+          snapPoint.dx + math.cos(element.rotation) * perpOffset,
+          snapPoint.dy + math.sin(element.rotation) * perpOffset);
+
       // Update element's room reference
       element.room = room;
-      
+
       currentSnapType = SnapType.wall;
       return true;
     }
-    
+
     // Try to find a corner as fallback
-    final cornerResult = Room.findClosestCorner(
-      element.position, 
-      rooms, 
-      snapDistance
-    );
-    
+    final cornerResult =
+        Room.findClosestCorner(element.position, rooms, snapDistance);
+
     if (cornerResult != null) {
       final cornerPos = cornerResult.$1;
       final room = cornerResult.$4;
       final cornerIndex = cornerResult.$3;
-      
+
       // Set position
       element.position = cornerPos;
-      
+
       // Calculate angle based on corner
       double angle;
       switch (cornerIndex) {
@@ -815,75 +1057,78 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         default:
           angle = 0;
       }
-      
+
       // Set the rotation
       element.rotation = angle;
-      
+
       // Update the room reference
       element.room = room;
-      
+
       // Offset position slightly from corner
       final offsetDistance = element.width / 4;
-      element.position = Offset(
-        cornerPos.dx + math.cos(angle) * offsetDistance,
-        cornerPos.dy + math.sin(angle) * offsetDistance
-      );
-      
+      element.position = Offset(cornerPos.dx + math.cos(angle) * offsetDistance,
+          cornerPos.dy + math.sin(angle) * offsetDistance);
+
       currentSnapType = SnapType.corner;
       return true;
     }
-    
+
     currentSnapType = SnapType.none;
     return false;
   }
-  
+
   // Add element to a wall at a specific point
-  void _addElementToWall(Room room, Offset position, (Offset, Offset) wall, ElementType type) {
+  void _addElementToWall(
+      Room room, Offset position, (Offset, Offset) wall, ElementType type) {
     // Create element
     final element = ArchitecturalElement(
       type: type,
       position: position,
       room: room,
-      wallHeight: type == ElementType.window ? 36.0 : room.walls[0].height, // 3 feet for window, room height for door
+      wallHeight: type == ElementType.window
+          ? 36.0
+          : room.walls[0].height, // 3 feet for window, room height for door
     );
-    
+
     // Calculate wall angle
     final wallVector = wall.$2 - wall.$1;
     final wallAngle = math.atan2(wallVector.dy, wallVector.dx);
-    
+
     // Set rotation perpendicular to wall
     element.rotation = wallAngle + math.pi / 2;
-    
+
     // Adjust position slightly away from wall
     final perpOffset = element.height / 2;
     element.position = Offset(
-      position.dx + math.cos(element.rotation) * perpOffset,
-      position.dy + math.sin(element.rotation) * perpOffset
-    );
-    
+        position.dx + math.cos(element.rotation) * perpOffset,
+        position.dy + math.sin(element.rotation) * perpOffset);
+
     setState(() {
       room.elements.add(element);
-      
+
       // Clear previous selections
       _clearAllSelections();
-      
+
       // Select the new element
       _selectElement(element);
-      
+
       // Switch to select mode
       mode = EditorMode.select;
     });
   }
-  
-  void _addElementToCorner(Room room, Offset cornerPos, int cornerIndex, ElementType type) {
+
+  void _addElementToCorner(
+      Room room, Offset cornerPos, int cornerIndex, ElementType type) {
     // Create element
     final element = ArchitecturalElement(
       type: type,
       position: cornerPos,
       room: room,
-      wallHeight: type == ElementType.window ? 36.0 : room.walls[0].height, // 3 feet for window, room height for door
+      wallHeight: type == ElementType.window
+          ? 36.0
+          : room.walls[0].height, // 3 feet for window, room height for door
     );
-    
+
     // Calculate angle based on corner
     double angle;
     switch (cornerIndex) {
@@ -902,74 +1147,80 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       default:
         angle = 0;
     }
-    
+
     // Set the rotation
     element.rotation = angle;
-    
+
     // Offset position slightly from corner
     final offsetDistance = element.width / 4;
-    element.position = Offset(
-      cornerPos.dx + math.cos(angle) * offsetDistance,
-      cornerPos.dy + math.sin(angle) * offsetDistance
-    );
-    
+    element.position = Offset(cornerPos.dx + math.cos(angle) * offsetDistance,
+        cornerPos.dy + math.sin(angle) * offsetDistance);
+
     setState(() {
       room.elements.add(element);
-      
+
       // Clear previous selections
       _clearAllSelections();
-      
+
       // Select the new element
       _selectElement(element);
-      
+
       // Switch to select mode
       mode = EditorMode.select;
     });
   }
-  
+
   // Update shared walls after room dimensions change
   void _updateSharedWallsAfterRoomChange(Room room) {
     // First, remove all existing shared wall connections for this room
     room.clearSharedWalls();
-    
+
     // Then check for new connections
     _updateSharedWalls();
   }
-  
+
   // Update shared wall connections for all rooms
   void _updateSharedWalls() {
     // First, clear all shared wall connections
     for (var room in rooms) {
       room.clearSharedWalls();
     }
-    
+
     // Re-establish shared wall connections
     for (int i = 0; i < rooms.length; i++) {
       for (int j = i + 1; j < rooms.length; j++) {
         final room1 = rooms[i];
         final room2 = rooms[j];
-        
+
         final walls1 = room1.getWallSegments();
         final walls2 = room2.getWallSegments();
-        
+
         // Check all wall pairs
         for (int w1 = 0; w1 < walls1.length; w1++) {
           for (int w2 = 0; w2 < walls2.length; w2++) {
-            if (Room.doWallsOverlap(walls1[w1], walls2[w2], 1.0)) {
+            // Use the improved overlap detection with higher tolerance
+            if (Room.doWallsOverlap(walls1[w1], walls2[w2], 5.0)) {
               // Mark walls as shared
               room1.addSharedWall(room2, w1, w2);
+
+              // Debug output to console
+              print(
+                  'Shared wall detected between ${room1.name} (wall $w1) and ${room2.name} (wall $w2)');
             }
           }
         }
       }
     }
+
+    // Force UI update after changing shared walls
+    setState(() {});
   }
 
   // Finds element at given point with tolerance consideration
   ArchitecturalElement? _findElementAt(Offset point) {
     // Try to find element under pointer, prioritizing selected ones
     ArchitecturalElement? foundElement;
-    
+
     // First check already selected elements
     for (var room in rooms) {
       for (var element in room.elements) {
@@ -978,7 +1229,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         }
       }
     }
-    
+
     // Then check unselected elements
     for (var room in rooms) {
       for (var element in room.elements) {
@@ -989,31 +1240,32 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       }
       if (foundElement != null) break;
     }
-    
+
     return foundElement;
   }
-  
+
   // Finds room at given point with priority for selected rooms
   Room? _findRoomAt(Offset point) {
     // First check if point is within already selected room
     if (selectedRoom != null && selectedRoom!.containsPoint(point)) {
       return selectedRoom;
     }
-    
+
     // Then check other rooms
     for (var room in rooms) {
       if (!room.selected && room.containsPoint(point)) {
         return room;
       }
     }
-    
+
     return null;
   }
 
   // Transform point from screen space to canvas space
   Offset _transformPoint(Offset point) {
     final matrix = transformationController.value;
-    final translation = Offset(matrix.getTranslation().x, matrix.getTranslation().y);
+    final translation =
+        Offset(matrix.getTranslation().x, matrix.getTranslation().y);
     final scale = matrix.getMaxScaleOnAxis();
     return (point - translation) / scale;
   }
@@ -1035,8 +1287,10 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
             onAddRoom: _addNewRoom,
             onRenameProject: _renameProject,
             onOpenSettings: _openSettings,
+            onShowSurfaceAreaInfo:
+                _showSurfaceAreaInfo, // Add this new callback
           ),
-          
+
           // Main Content
           Expanded(
             child: Row(
@@ -1045,9 +1299,9 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
                 Expanded(
                   child: _buildCanvas(),
                 ),
-                
+
                 // Right Properties Panel (conditional)
-                if (showRightPanel) 
+                if (showRightPanel)
                   SizedBox(
                     width: 300,
                     child: PropertiesPanel(
@@ -1061,7 +1315,8 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
                       onElementNameChanged: _handleElementNameChange,
                       onElementWidthChanged: _handleElementWidthChange,
                       onElementHeightChanged: _handleElementHeightChange,
-                      onElementWallHeightChanged: _handleElementWallHeightChange,
+                      onElementWallHeightChanged:
+                          _handleElementWallHeightChange,
                       onElementRotationChanged: _handleElementRotationChange,
                       onPanelClosed: _handleRightPanelToggle,
                       gridSize: gridSize,
@@ -1072,7 +1327,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
               ],
             ),
           ),
-          
+
           // Bottom Status Bar
           StatusBar(
             showGrid: showGrid,
@@ -1103,7 +1358,8 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         boundaryMargin: const EdgeInsets.all(1000),
         minScale: 0.1,
         maxScale: 5.0,
-        panEnabled: false, // Disable default pan to use our custom implementation
+        panEnabled:
+            false, // Disable default pan to use our custom implementation
         child: Container(
           width: 3000,
           height: 3000,
@@ -1207,7 +1463,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Measurement Units Section
-            const Text("Measurement Unit", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Measurement Unit",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             DropdownButton<MeasurementUnit>(
               value: unit,
@@ -1224,13 +1481,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 }
               },
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Grid Settings
-            const Text("Grid Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Grid Settings",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            
+
             // Grid Real Size
             Row(
               children: [
@@ -1252,13 +1510,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 Text("$gridRealSize ${unit.symbol}"),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Default Wall Height
-            const Text("Default Wall Height", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Default Wall Height",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            
+
             Row(
               children: [
                 const Text("Wall Height: "),
@@ -1279,13 +1538,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 Text("$defaultWallHeight ${unit.symbol}"),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Snapping Settings
-            const Text("Snapping Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Snapping Settings",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            
+
             Row(
               children: [
                 const Text("Snap Distance: "),
@@ -1306,13 +1566,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 Text("${snapDistance.round()}px"),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Wall Settings
-            const Text("Wall Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Wall Settings",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            
+
             Row(
               children: [
                 const Text("Wall Thickness: "),
@@ -1333,13 +1594,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 Text("${wallThickness.round()}px"),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Display Options
-            const Text("Display Options", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Display Options",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            
+
             CheckboxListTile(
               title: const Text("Show Grid"),
               value: showGrid,
@@ -1350,7 +1612,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               },
               contentPadding: EdgeInsets.zero,
             ),
-            
+
             CheckboxListTile(
               title: const Text("Show Measurements"),
               value: showMeasurements,
@@ -1361,13 +1623,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               },
               contentPadding: EdgeInsets.zero,
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Project Statistics Section
-            const Text("Project Statistics", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text("Project Statistics",
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            
+
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(12),
@@ -1384,9 +1647,17 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                       Text("Doors: ${widget.projectStats['doorCount']}"),
                       Text("Windows: ${widget.projectStats['windowCount']}"),
                       const SizedBox(height: 8),
-                      Text("Total Surface Area: ${MeasurementUtils.formatArea(widget.projectStats['totalSurfaceArea'], unit)}"),
-                      Text("Total Wall Volume: ${MeasurementUtils.formatVolume(widget.projectStats['totalWallVolume'], unit)}"),
-                      Text("Total Room Volume: ${MeasurementUtils.formatVolume(widget.projectStats['totalRoomVolume'], unit)}"),
+                      Text(
+                          "Total Surface Area: ${MeasurementUtils.formatArea(widget.projectStats['totalSurfaceArea'], unit)}"),
+                      ElevatedButton(
+                        onPressed: () {
+                          // Close settings dialog and show surface area info
+                          Navigator.pop(context);
+                          (FloorPlanEditor.of(context) as FloorPlanEditorState)
+                              ._showSurfaceAreaInfo();
+                        },
+                        child: const Text("View Detailed Surface Information"),
+                      ),
                     ],
                   ),
                 ),

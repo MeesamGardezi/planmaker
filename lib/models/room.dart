@@ -1,5 +1,15 @@
+// lib/models/room.dart
 import 'dart:ui';
 import 'element.dart';
+import 'dart:math' as math;
+
+// Extension to add normalization to Offset
+extension OffsetExtension on Offset {
+  Offset normalized() {
+    if (distance == 0) return Offset.zero;
+    return Offset(dx / distance, dy / distance);
+  }
+}
 
 class Wall {
   double height;
@@ -255,6 +265,11 @@ class Room {
     final wall1Vector = wall1.$2 - wall1.$1;
     final wall2Vector = wall2.$2 - wall2.$1;
     
+    // Skip very short walls
+    if (wall1Vector.distance < 1.0 || wall2Vector.distance < 1.0) {
+      return false;
+    }
+    
     // Calculate normalized directional vectors
     final wall1Dir = Offset(
       wall1Vector.dx / wall1Vector.distance,
@@ -268,40 +283,80 @@ class Room {
     
     // Dot product close to 1 or -1 means parallel
     final dot = wall1Dir.dx * wall2Dir.dx + wall1Dir.dy * wall2Dir.dy;
-    return (dot.abs() > 0.97); // Allow for small angle differences
+    
+    // Check if walls are primarily in the same direction
+    // This ensures we're not connecting walls that are at right angles to each other
+    final isHorizontal1 = wall1Vector.dx.abs() > wall1Vector.dy.abs();
+    final isHorizontal2 = wall2Vector.dx.abs() > wall2Vector.dy.abs();
+    
+    return (dot.abs() > 0.9) && (isHorizontal1 == isHorizontal2); // More strict parallel check (0.9 instead of 0.97)
   }
   
   // Check if two walls are aligned (parallel and collinear)
   static bool areWallsAligned((Offset, Offset) wall1, (Offset, Offset) wall2, double tolerance) {
     if (!areWallsParallel(wall1, wall2)) return false;
     
-    // For aligned walls, the distance from any point of wall1 to wall2 should be small
-    return distanceToWall(wall1.$1, wall2) <= tolerance &&
-           distanceToWall(wall1.$2, wall2) <= tolerance;
+    // For aligned walls, the average distance between all points should be small
+    final avgDistance = (
+      distanceToWall(wall1.$1, wall2) +
+      distanceToWall(wall1.$2, wall2) +
+      distanceToWall(wall2.$1, wall1) +
+      distanceToWall(wall2.$2, wall1)
+    ) / 4.0;
+    
+    return avgDistance <= tolerance;
   }
   
   // Check if two walls partially or fully overlap
   static bool doWallsOverlap((Offset, Offset) wall1, (Offset, Offset) wall2, double tolerance) {
     if (!areWallsAligned(wall1, wall2, tolerance)) return false;
     
-    // Project walls onto common axis to check for overlap
+    // Determine wall orientation (horizontal or vertical)
     final wall1Vector = wall1.$2 - wall1.$1;
-    final isHorizontal = wall1Vector.dy.abs() < 0.001;
+    final isHorizontal = wall1Vector.dy.abs() < wall1Vector.dx.abs();
     
     if (isHorizontal) {
-      // Sort x coordinates
-      final x1 = [wall1.$1.dx, wall1.$2.dx]..sort();
-      final x2 = [wall2.$1.dx, wall2.$2.dx]..sort();
+      // For horizontal walls, check x-axis overlap with increased tolerance
+      final x1 = [wall1.$1.dx, wall1.$2.dx];
+      final x2 = [wall2.$1.dx, wall2.$2.dx];
+      x1.sort();
+      x2.sort();
       
-      // Check for x overlap
-      return !(x1[1] < x2[0] || x2[1] < x1[0]);
+      // Calculate overlap
+      final overlapStart = math.max(x1[0], x2[0]);
+      final overlapEnd = math.min(x1[1], x2[1]);
+      final overlap = overlapEnd - overlapStart;
+      
+      // Define minimum overlap as a percentage of the shorter wall
+      final shortestWallLength = math.min(
+        (wall1.$2 - wall1.$1).distance,
+        (wall2.$2 - wall2.$1).distance
+      );
+      final minRequiredOverlap = shortestWallLength * 0.3; // 30% overlap required
+      
+      // Check if overlap is significant
+      return overlap > minRequiredOverlap;
     } else {
-      // Sort y coordinates
-      final y1 = [wall1.$1.dy, wall1.$2.dy]..sort();
-      final y2 = [wall2.$1.dy, wall2.$2.dy]..sort();
+      // For vertical walls, check y-axis overlap
+      final y1 = [wall1.$1.dy, wall1.$2.dy];
+      final y2 = [wall2.$1.dy, wall2.$2.dy];
+      y1.sort();
+      y2.sort();
       
-      // Check for y overlap
-      return !(y1[1] < y2[0] || y2[1] < y1[0]);
+      // Calculate overlap
+      final overlapStart = math.max(y1[0], y2[0]);
+      final overlapEnd = math.min(y1[1], y2[1]);
+      final overlap = overlapEnd - overlapStart;
+      
+      // Define minimum overlap as a percentage of the shorter wall
+      final shortestWallLength = math.min(
+        (wall1.$2 - wall1.$1).distance,
+        (wall2.$2 - wall2.$1).distance
+      );
+      final minRequiredOverlap = shortestWallLength * 0.3; // 30% overlap required
+      
+      // Check if overlap is significant
+      return overlap > minRequiredOverlap;
     }
   }
   
