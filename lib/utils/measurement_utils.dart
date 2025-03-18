@@ -32,6 +32,24 @@ class MeasurementUtils {
     }
   }
   
+  // Convert from meters to the specified unit
+  static double convertLength(double meters, MeasurementUnit unit) {
+    return meters * unit.conversionFromMeters;
+  }
+  
+  // Convert from the specified unit to meters
+  static double convertToMeters(double value, MeasurementUnit unit) {
+    return value / unit.conversionFromMeters;
+  }
+  
+  // Convert from one unit to another
+  static double convertBetweenUnits(double value, MeasurementUnit fromUnit, MeasurementUnit toUnit) {
+    // First convert to meters
+    final meters = convertToMeters(value, fromUnit);
+    // Then convert to target unit
+    return convertLength(meters, toUnit);
+  }
+  
   // Convert from grid to real world and vice versa
   static double gridToReal(double gridValue, double gridSize, double gridRealSize) {
     return gridValue * gridRealSize / gridSize;
@@ -56,5 +74,41 @@ class MeasurementUtils {
   // Format with unit for display in text fields
   static String formatWithUnit(double value, MeasurementUnit unit) {
     return '${value.toStringAsFixed(2)} ${unit.symbol}';
+  }
+  
+  // Calculate total surface area for all rooms
+  static double calculateTotalSurfaceArea(
+      List<dynamic> rooms, double gridSize, double gridRealSize) {
+    double totalArea = 0;
+    
+    for (var room in rooms) {
+      totalArea += room.getTotalSurfaceArea(gridSize, gridRealSize);
+    }
+    
+    return totalArea;
+  }
+  
+  // Calculate total wall volume for all rooms
+  static double calculateTotalWallVolume(
+      List<dynamic> rooms, double gridSize, double gridRealSize) {
+    double totalVolume = 0;
+    
+    for (var room in rooms) {
+      totalVolume += room.getTotalWallVolume(gridSize, gridRealSize);
+    }
+    
+    return totalVolume;
+  }
+  
+  // Calculate total room volume
+  static double calculateTotalRoomVolume(
+      List<dynamic> rooms, double gridSize, double gridRealSize) {
+    double totalVolume = 0;
+    
+    for (var room in rooms) {
+      totalVolume += room.getVolume(gridSize, gridRealSize);
+    }
+    
+    return totalVolume;
   }
 }

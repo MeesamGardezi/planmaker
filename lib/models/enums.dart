@@ -7,8 +7,8 @@ enum ElementType {
 }
 
 enum MeasurementUnit {
-  meters('m', 1.0),
   feet('ft', 3.28084),
+  meters('m', 1.0),
   inches('in', 39.3701);
 
   final String symbol;

@@ -6,6 +6,7 @@ import '../painters/floor_plan_painter.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/properties_panel.dart';
 import '../widgets/status_bar.dart';
+import '../utils/measurement_utils.dart';
 import 'dart:math' as math;
 
 class FloorPlanEditor extends StatefulWidget {
@@ -30,7 +31,10 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   // Grid and measurement settings
   double gridSize = 20.0; // Fixed grid size
   double gridRealSize = 1.0;
-  MeasurementUnit unit = MeasurementUnit.meters;
+  MeasurementUnit unit = MeasurementUnit.feet;
+  
+  // Default wall height for new rooms
+  double defaultWallHeight = 8.0; // Default in feet
   
   // Panel states
   bool showRightPanel = false;
@@ -98,6 +102,12 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       position = Offset(maxX + 120, position.dy);
     }
     
+    // Create walls with default height
+    List<Wall> walls = List.generate(
+      4, 
+      (_) => Wall(height: defaultWallHeight, breadth: 0.5)
+    );
+    
     // Create new room
     final newRoom = Room(
       name: 'Room ${roomCounter++}',
@@ -105,6 +115,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       position: position,
       width: 200,
       height: 150,
+      walls: walls,
     );
     
     setState(() {
@@ -235,6 +246,12 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     });
   }
   
+  void _handleElementWallHeightChange(ArchitecturalElement element, double newWallHeight) {
+    setState(() {
+      element.wallHeight = newWallHeight;
+    });
+  }
+  
   void _handleElementRotationChange(ArchitecturalElement element, double newRotation) {
     setState(() {
       element.rotation = newRotation;
@@ -261,7 +278,23 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
   
   void _handleUnitChange(MeasurementUnit newUnit) {
     setState(() {
+      // Calculate conversion factor
+      final conversionFactor = newUnit.conversionFromMeters / unit.conversionFromMeters;
+      
+      // Update default wall height
+      defaultWallHeight = MeasurementUtils.convertBetweenUnits(defaultWallHeight, unit, newUnit);
+      
+      // Update grid real size
+      gridRealSize = MeasurementUtils.convertBetweenUnits(gridRealSize, unit, newUnit);
+      
+      // Update unit
       unit = newUnit;
+    });
+  }
+  
+  void _handleDefaultWallHeightChange(double newHeight) {
+    setState(() {
+      defaultWallHeight = newHeight;
     });
   }
   
@@ -323,155 +356,77 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
     );
   }
   
+  // Calculate project statistics
+  Map<String, dynamic> _calculateProjectStats() {
+    // Calculate total areas and volumes
+    final totalSurfaceArea = MeasurementUtils.calculateTotalSurfaceArea(
+      rooms, gridSize, gridRealSize);
+    
+    final totalWallVolume = MeasurementUtils.calculateTotalWallVolume(
+      rooms, gridSize, gridRealSize);
+    
+    final totalRoomVolume = MeasurementUtils.calculateTotalRoomVolume(
+      rooms, gridSize, gridRealSize);
+    
+    // Count all elements
+    int doorCount = 0;
+    int windowCount = 0;
+    
+    for (var room in rooms) {
+      for (var element in room.elements) {
+        if (element.type == ElementType.door) {
+          doorCount++;
+        } else if (element.type == ElementType.window) {
+          windowCount++;
+        }
+      }
+    }
+    
+    return {
+      'roomCount': rooms.length,
+      'doorCount': doorCount,
+      'windowCount': windowCount,
+      'totalSurfaceArea': totalSurfaceArea,
+      'totalWallVolume': totalWallVolume,
+      'totalRoomVolume': totalRoomVolume,
+    };
+  }
+  
   void _openSettings() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Settings"),
-        content: SizedBox(
-          width: 300,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Grid Settings (simplified)
-              const Text("Grid Settings", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              
-              // Grid Real Size
-              Row(
-                children: [
-                  const Text("Grid Unit Size: "),
-                  Expanded(
-                    child: Slider(
-                      value: gridRealSize,
-                      min: 0.1,
-                      max: 5.0,
-                      divisions: 49,
-                      label: gridRealSize.toString(),
-                      onChanged: (value) {
-                        setState(() {
-                          gridRealSize = value;
-                        });
-                      },
-                    ),
-                  ),
-                  Text("$gridRealSize ${unit.symbol}"),
-                ],
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Snapping Settings
-              const Text("Snapping Settings", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              
-              Row(
-                children: [
-                  const Text("Snap Distance: "),
-                  Expanded(
-                    child: Slider(
-                      value: snapDistance,
-                      min: 5,
-                      max: 50,
-                      divisions: 9,
-                      label: snapDistance.round().toString(),
-                      onChanged: (value) {
-                        setState(() {
-                          snapDistance = value;
-                        });
-                      },
-                    ),
-                  ),
-                  Text("${snapDistance.round()}px"),
-                ],
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Measurement Unit
-              const Text("Measurement Unit", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              
-              DropdownButton<MeasurementUnit>(
-                value: unit,
-                isExpanded: true,
-                items: MeasurementUnit.values
-                    .map((u) => DropdownMenuItem(
-                          value: u,
-                          child: Text("${u.name} (${u.symbol})"),
-                        ))
-                    .toList(),
-                onChanged: (MeasurementUnit? newUnit) {
-                  if (newUnit != null) {
-                    setState(() => unit = newUnit);
-                  }
-                },
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Wall Settings
-              const Text("Wall Settings", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              
-              Row(
-                children: [
-                  const Text("Wall Thickness: "),
-                  Expanded(
-                    child: Slider(
-                      value: wallThickness,
-                      min: 1,
-                      max: 10,
-                      divisions: 9,
-                      label: wallThickness.round().toString(),
-                      onChanged: (value) {
-                        setState(() {
-                          wallThickness = value;
-                        });
-                      },
-                    ),
-                  ),
-                  Text("${wallThickness.round()}px"),
-                ],
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Display Options
-              const Text("Display Options", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              
-              CheckboxListTile(
-                title: const Text("Show Grid"),
-                value: showGrid,
-                onChanged: (value) {
-                  setState(() {
-                    showGrid = value ?? true;
-                  });
-                },
-                contentPadding: EdgeInsets.zero,
-              ),
-              
-              CheckboxListTile(
-                title: const Text("Show Measurements"),
-                value: showMeasurements,
-                onChanged: (value) {
-                  setState(() {
-                    showMeasurements = value ?? true;
-                  });
-                },
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Close"),
-          ),
-        ],
+      builder: (context) => _SettingsDialog(
+        gridRealSize: gridRealSize,
+        defaultWallHeight: defaultWallHeight,
+        snapDistance: snapDistance,
+        unit: unit,
+        wallThickness: wallThickness,
+        showGrid: showGrid,
+        showMeasurements: showMeasurements,
+        projectStats: _calculateProjectStats(),
+        onGridRealSizeChanged: _handleGridRealSizeChange,
+        onDefaultWallHeightChanged: _handleDefaultWallHeightChange,
+        onSnapDistanceChanged: (value) {
+          setState(() {
+            snapDistance = value;
+          });
+        },
+        onUnitChanged: _handleUnitChange,
+        onWallThicknessChanged: (value) {
+          setState(() {
+            wallThickness = value;
+          });
+        },
+        onShowGridChanged: (value) {
+          setState(() {
+            showGrid = value ?? true;
+          });
+        },
+        onShowMeasurementsChanged: (value) {
+          setState(() {
+            showMeasurements = value ?? true;
+          });
+        },
       ),
     );
   }
@@ -584,6 +539,12 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       }
     }
     else if (mode == EditorMode.room) {
+      // Create walls with default height
+      List<Wall> walls = List.generate(
+        4, 
+        (_) => Wall(height: defaultWallHeight, breadth: 0.5)
+      );
+      
       // Create new room at the pointer position
       final newRoom = Room(
         name: 'Room ${roomCounter++}',
@@ -591,6 +552,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
         position: point,
         width: 200,
         height: 150,
+        walls: walls,
       );
       
       setState(() {
@@ -882,6 +844,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       type: type,
       position: position,
       room: room,
+      wallHeight: type == ElementType.window ? 36.0 : room.walls[0].height, // 3 feet for window, room height for door
     );
     
     // Calculate wall angle
@@ -918,6 +881,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
       type: type,
       position: cornerPos,
       room: room,
+      wallHeight: type == ElementType.window ? 36.0 : room.walls[0].height, // 3 feet for window, room height for door
     );
     
     // Calculate angle based on corner
@@ -1097,6 +1061,7 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
                       onElementNameChanged: _handleElementNameChange,
                       onElementWidthChanged: _handleElementWidthChange,
                       onElementHeightChanged: _handleElementHeightChange,
+                      onElementWallHeightChanged: _handleElementWallHeightChange,
                       onElementRotationChanged: _handleElementRotationChange,
                       onPanelClosed: _handleRightPanelToggle,
                       gridSize: gridSize,
@@ -1165,6 +1130,291 @@ class FloorPlanEditorState extends State<FloorPlanEditor> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// Stateful Settings Dialog
+class _SettingsDialog extends StatefulWidget {
+  final double gridRealSize;
+  final double defaultWallHeight;
+  final double snapDistance;
+  final MeasurementUnit unit;
+  final double wallThickness;
+  final bool showGrid;
+  final bool showMeasurements;
+  final Map<String, dynamic> projectStats;
+  final Function(double) onGridRealSizeChanged;
+  final Function(double) onDefaultWallHeightChanged;
+  final Function(double) onSnapDistanceChanged;
+  final Function(MeasurementUnit) onUnitChanged;
+  final Function(double) onWallThicknessChanged;
+  final Function(bool?) onShowGridChanged;
+  final Function(bool?) onShowMeasurementsChanged;
+
+  const _SettingsDialog({
+    required this.gridRealSize,
+    required this.defaultWallHeight,
+    required this.snapDistance,
+    required this.unit,
+    required this.wallThickness,
+    required this.showGrid,
+    required this.showMeasurements,
+    required this.projectStats,
+    required this.onGridRealSizeChanged,
+    required this.onDefaultWallHeightChanged,
+    required this.onSnapDistanceChanged,
+    required this.onUnitChanged,
+    required this.onWallThicknessChanged,
+    required this.onShowGridChanged,
+    required this.onShowMeasurementsChanged,
+  });
+
+  @override
+  _SettingsDialogState createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<_SettingsDialog> {
+  late double gridRealSize;
+  late double defaultWallHeight;
+  late double snapDistance;
+  late MeasurementUnit unit;
+  late double wallThickness;
+  late bool showGrid;
+  late bool showMeasurements;
+
+  @override
+  void initState() {
+    super.initState();
+    gridRealSize = widget.gridRealSize;
+    defaultWallHeight = widget.defaultWallHeight;
+    snapDistance = widget.snapDistance;
+    unit = widget.unit;
+    wallThickness = widget.wallThickness;
+    showGrid = widget.showGrid;
+    showMeasurements = widget.showMeasurements;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text("Settings"),
+      content: SizedBox(
+        width: 500,
+        height: 500,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Measurement Units Section
+            const Text("Measurement Unit", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            DropdownButton<MeasurementUnit>(
+              value: unit,
+              isExpanded: true,
+              items: MeasurementUnit.values
+                  .map((u) => DropdownMenuItem(
+                        value: u,
+                        child: Text("${u.name} (${u.symbol})"),
+                      ))
+                  .toList(),
+              onChanged: (MeasurementUnit? newUnit) {
+                if (newUnit != null) {
+                  setState(() => unit = newUnit);
+                }
+              },
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Grid Settings
+            const Text("Grid Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            
+            // Grid Real Size
+            Row(
+              children: [
+                const Text("Grid Unit Size: "),
+                Expanded(
+                  child: Slider(
+                    value: gridRealSize,
+                    min: 0.1,
+                    max: 5.0,
+                    divisions: 49,
+                    label: gridRealSize.toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        gridRealSize = value;
+                      });
+                    },
+                  ),
+                ),
+                Text("$gridRealSize ${unit.symbol}"),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Default Wall Height
+            const Text("Default Wall Height", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            
+            Row(
+              children: [
+                const Text("Wall Height: "),
+                Expanded(
+                  child: Slider(
+                    value: defaultWallHeight,
+                    min: 6.0,
+                    max: 20.0,
+                    divisions: 28,
+                    label: defaultWallHeight.toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        defaultWallHeight = value;
+                      });
+                    },
+                  ),
+                ),
+                Text("$defaultWallHeight ${unit.symbol}"),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Snapping Settings
+            const Text("Snapping Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            
+            Row(
+              children: [
+                const Text("Snap Distance: "),
+                Expanded(
+                  child: Slider(
+                    value: snapDistance,
+                    min: 5,
+                    max: 50,
+                    divisions: 9,
+                    label: snapDistance.round().toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        snapDistance = value;
+                      });
+                    },
+                  ),
+                ),
+                Text("${snapDistance.round()}px"),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Wall Settings
+            const Text("Wall Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            
+            Row(
+              children: [
+                const Text("Wall Thickness: "),
+                Expanded(
+                  child: Slider(
+                    value: wallThickness,
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: wallThickness.round().toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        wallThickness = value;
+                      });
+                    },
+                  ),
+                ),
+                Text("${wallThickness.round()}px"),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Display Options
+            const Text("Display Options", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            
+            CheckboxListTile(
+              title: const Text("Show Grid"),
+              value: showGrid,
+              onChanged: (value) {
+                setState(() {
+                  showGrid = value ?? true;
+                });
+              },
+              contentPadding: EdgeInsets.zero,
+            ),
+            
+            CheckboxListTile(
+              title: const Text("Show Measurements"),
+              value: showMeasurements,
+              onChanged: (value) {
+                setState(() {
+                  showMeasurements = value ?? true;
+                });
+              },
+              contentPadding: EdgeInsets.zero,
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Project Statistics Section
+            const Text("Project Statistics", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Rooms: ${widget.projectStats['roomCount']}"),
+                      Text("Doors: ${widget.projectStats['doorCount']}"),
+                      Text("Windows: ${widget.projectStats['windowCount']}"),
+                      const SizedBox(height: 8),
+                      Text("Total Surface Area: ${MeasurementUtils.formatArea(widget.projectStats['totalSurfaceArea'], unit)}"),
+                      Text("Total Wall Volume: ${MeasurementUtils.formatVolume(widget.projectStats['totalWallVolume'], unit)}"),
+                      Text("Total Room Volume: ${MeasurementUtils.formatVolume(widget.projectStats['totalRoomVolume'], unit)}"),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            // Apply all settings
+            widget.onGridRealSizeChanged(gridRealSize);
+            widget.onDefaultWallHeightChanged(defaultWallHeight);
+            widget.onSnapDistanceChanged(snapDistance);
+            widget.onUnitChanged(unit);
+            widget.onWallThicknessChanged(wallThickness);
+            widget.onShowGridChanged(showGrid);
+            widget.onShowMeasurementsChanged(showMeasurements);
+            Navigator.pop(context);
+          },
+          child: const Text("Apply"),
+        ),
+      ],
     );
   }
 }

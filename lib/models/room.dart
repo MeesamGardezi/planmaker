@@ -8,8 +8,8 @@ class Wall {
   Color? color;
   
   Wall({
-    this.height = 2.4, // Default height in meters
-    this.breadth = 0.15, // Default breadth/thickness in meters
+    this.height = 8.0, // Default height in feet
+    this.breadth = 0.5, // Default breadth/thickness in feet
     this.material,
     this.color,
   });
@@ -175,6 +175,15 @@ class Room {
     final realLength = pixelLength * gridRealSize / gridSize;
     
     final wall = walls[wallIndex];
+    return realLength * wall.height;
+  }
+  
+  // Calculate wall volume for a specific wall
+  double getWallVolume(int wallIndex, double gridSize, double gridRealSize) {
+    final pixelLength = getWallLengths()[wallIndex];
+    final realLength = pixelLength * gridRealSize / gridSize;
+    
+    final wall = walls[wallIndex];
     return realLength * wall.height * wall.breadth;
   }
   
@@ -184,10 +193,22 @@ class Room {
     
     List<double> areas = [];
     for (int i = 0; i < 4; i++) {
-      areas.add(realLengths[i] * walls[i].height * walls[i].breadth);
+      areas.add(realLengths[i] * walls[i].height);
     }
     
     return areas;
+  }
+  
+  // Calculate volumes for all walls
+  List<double> getAllWallVolumes(double gridSize, double gridRealSize) {
+    final realLengths = getWallRealLengths(gridSize, gridRealSize);
+    
+    List<double> volumes = [];
+    for (int i = 0; i < 4; i++) {
+      volumes.add(realLengths[i] * walls[i].height * walls[i].breadth);
+    }
+    
+    return volumes;
   }
   
   // Helper method to calculate the distance from a point to a wall segment
@@ -259,7 +280,7 @@ class Room {
            distanceToWall(wall1.$2, wall2) <= tolerance;
   }
   
-  // Check if two walls overlap
+  // Check if two walls partially or fully overlap
   static bool doWallsOverlap((Offset, Offset) wall1, (Offset, Offset) wall2, double tolerance) {
     if (!areWallsAligned(wall1, wall2, tolerance)) return false;
     
@@ -281,6 +302,30 @@ class Room {
       
       // Check for y overlap
       return !(y1[1] < y2[0] || y2[1] < y1[0]);
+    }
+  }
+  
+  // Calculate the overlap length between two walls
+  static double getWallsOverlapLength((Offset, Offset) wall1, (Offset, Offset) wall2) {
+    final wall1Vector = wall1.$2 - wall1.$1;
+    final isHorizontal = wall1Vector.dy.abs() < 0.001;
+    
+    if (isHorizontal) {
+      // Sort x coordinates
+      final x1 = [wall1.$1.dx, wall1.$2.dx]..sort();
+      final x2 = [wall2.$1.dx, wall2.$2.dx]..sort();
+      
+      // Calculate overlap
+      if (x1[1] < x2[0] || x2[1] < x1[0]) return 0;
+      return (x1[1] < x2[1] ? x1[1] : x2[1]) - (x1[0] > x2[0] ? x1[0] : x2[0]);
+    } else {
+      // Sort y coordinates
+      final y1 = [wall1.$1.dy, wall1.$2.dy]..sort();
+      final y2 = [wall2.$1.dy, wall2.$2.dy]..sort();
+      
+      // Calculate overlap
+      if (y1[1] < y2[0] || y2[1] < y1[0]) return 0;
+      return (y1[1] < y2[1] ? y1[1] : y2[1]) - (y1[0] > y2[0] ? y1[0] : y2[0]);
     }
   }
   
@@ -531,12 +576,19 @@ class Room {
         : null;
   }
   
-  // Get area in square meters
+  // Get area in square units
   double getArea(double gridSize, double gridRealSize) {
     return width * height * (gridRealSize / gridSize) * (gridRealSize / gridSize);
   }
   
-  // Get perimeter in meters
+  // Get room volume in cubic units
+  double getVolume(double gridSize, double gridRealSize) {
+    // Use the height of the top wall as the room height
+    final roomHeight = walls[0].height;
+    return getArea(gridSize, gridRealSize) * roomHeight;
+  }
+  
+  // Get perimeter in linear units
   double getPerimeter(double gridSize, double gridRealSize) {
     // Calculate perimeter excluding shared walls
     double perimeter = 0;
@@ -551,5 +603,49 @@ class Room {
     }
     
     return perimeter * (gridRealSize / gridSize);
+  }
+  
+  // Calculate total surface area (walls + floor + ceiling)
+  double getTotalSurfaceArea(double gridSize, double gridRealSize) {
+    double surfaceArea = 0;
+    
+    // Add floor and ceiling area
+    final floorArea = getArea(gridSize, gridRealSize);
+    surfaceArea += floorArea * 2; // Floor + ceiling
+    
+    // Add wall areas (excluding doors and windows)
+    final wallAreas = getAllWallAreas(gridSize, gridRealSize);
+    for (int i = 0; i < wallAreas.length; i++) {
+      if (!isWallShared(i)) {
+        surfaceArea += wallAreas[i];
+      }
+    }
+    
+    // Subtract door and window areas
+    for (var element in elements) {
+      final elementWidth = element.width * gridRealSize / gridSize;
+      final elementHeight = element.height * gridRealSize / gridSize;
+      surfaceArea -= elementWidth * elementHeight;
+    }
+    
+    return surfaceArea;
+  }
+  
+  // Calculate total wall volume (excluding doors and windows)
+  double getTotalWallVolume(double gridSize, double gridRealSize) {
+    double totalVolume = 0;
+    
+    // Add all wall volumes
+    final wallVolumes = getAllWallVolumes(gridSize, gridRealSize);
+    for (int i = 0; i < wallVolumes.length; i++) {
+      if (!isWallShared(i)) {
+        totalVolume += wallVolumes[i];
+      } else {
+        // Add half volume for shared walls to avoid double counting
+        totalVolume += wallVolumes[i] / 2;
+      }
+    }
+    
+    return totalVolume;
   }
 }
